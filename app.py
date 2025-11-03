@@ -187,7 +187,7 @@ def compute_scores_for_roc(X):
     return None
 
 # ---------- Header ----------
-st.title("🌊 Sonar Rocks vs Mines")
+st.title("⚒️ SONAR: Rocks vs Mines")
 st.markdown('<hr class="custom">', unsafe_allow_html=True)
 
 # Initialize session storage for cross-tab usage
