@@ -12,7 +12,7 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import confusion_matrix, roc_curve, auc
 
 # ---------- Page & basic setup ----------
-st.set_page_config(page_title="Sonar Rocks vs Mines", page_icon="🌊", layout="wide")
+st.set_page_config(page_title="Sonar Rocks vs Mines", page_icon="⚒️", layout="wide")
 
 # Color palettes (material-ish)
 PALETTES = {
@@ -27,7 +27,7 @@ with st.sidebar:
     st.header("🎨 Appearance")
     palette_name = st.selectbox("Color palette", list(PALETTES.keys()), index=0)
     palette = PALETTES[palette_name]
-    dark_mode = st.toggle("Use dark background", value=True)
+    dark_mode = st.toggle("Use dark background", value=False)
 
 # Inject CSS for palette
 def inject_css(pal, dark=True):
@@ -229,7 +229,7 @@ with tab1:
 
                     st.markdown("**Predictions**")
                     st.dataframe(pd.DataFrame({"prediction": labels_pred}), use_container_width=True)
-                    st.balloons()
+                    # NOTE: Removed balloons here; balloons will only trigger for single-sample 'M'
             except Exception as e:
                 st.error(f"Error processing file: {e}")
 
@@ -257,6 +257,9 @@ with tab1:
                         classes = le.inverse_transform([0, 1])
                         st.write({"probabilities": {classes[0]: float(proba[0]), classes[1]: float(proba[1])}})
                     st.markdown('</div>', unsafe_allow_html=True)
+                    # Trigger balloons only if predicted label is 'M' (Mine)
+                    if label == "M":
+                        st.balloons()
             except Exception as e:
                 st.error(f"Error: {e}")
 
