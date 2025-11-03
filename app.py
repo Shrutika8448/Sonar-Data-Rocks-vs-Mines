@@ -27,7 +27,7 @@ with st.sidebar:
     st.header("🎨 Appearance")
     palette_name = st.selectbox("Color palette", list(PALETTES.keys()), index=0)
     palette = PALETTES[palette_name]
-    dark_mode = st.toggle("Use dark background", value=False)
+    dark_mode = st.toggle("Use dark background", value=True)
 
 # Inject CSS for palette
 def inject_css(pal, dark=True):
@@ -76,8 +76,12 @@ inject_css(palette, dark=dark_mode)
 # ---------- Load artifacts ----------
 @st.cache_resource
 def load_artifacts():
-    model = joblib.load("sonar_model.pkl")   # sklearn Pipeline with scaler + classifier
-    le = joblib.load("label_encoder.pkl")    # LabelEncoder for ['R','M']
+    try:
+        model = joblib.load("sonar_model.pkl")   # sklearn Pipeline with scaler + classifier
+        le = joblib.load("label_encoder.pkl")    # LabelEncoder for ['R','M']
+    except Exception as e:
+        st.error(f"Failed to load model artifacts: {e}")
+        st.stop()
     return model, le
 
 model, le = load_artifacts()
@@ -92,6 +96,12 @@ def clean_df_zero_width(df: pd.DataFrame) -> pd.DataFrame:
     return df.applymap(lambda x: strip_zero_width(x) if isinstance(x, str) else x)
 
 def prepare_features(df_raw: pd.DataFrame):
+    """
+    Returns:
+      df_num: numeric features DataFrame with exactly 60 columns
+      y_true: np.ndarray of encoded labels if present, else None
+      y_true_str: np.ndarray of string labels ['R','M'] if present, else None
+    """
     # Remove zero-width chars possibly introduced by copy-paste/upload
     df_raw = clean_df_zero_width(df_raw)
 
@@ -180,12 +190,20 @@ def compute_scores_for_roc(X):
 st.title("🌊 Sonar Rocks vs Mines")
 st.markdown('<hr class="custom">', unsafe_allow_html=True)
 
+# Initialize session storage for cross-tab usage
+if "df_num" not in st.session_state:
+    st.session_state["df_num"] = None
+if "y_true" not in st.session_state:
+    st.session_state["y_true"] = None
+if "y_true_str" not in st.session_state:
+    st.session_state["y_true_str"] = None
+
 # ---------- Tabs ----------
 tab1, tab2, tab3, tab4 = st.tabs(["🚀 Workflow", "🔎 EDA", "📊 Evaluation", "⚙️ Settings"])
 
 with tab1:
     st.subheader("Upload & Predict")
-    c_left, c_right = st.columns([2, 1])
+    c_left, c_right = st.columns([2, 1], vertical_alignment="top")
 
     with c_left:
         uploaded = st.file_uploader("Upload CSV (60 features, or 60+label R/M)", type=["csv"])
@@ -200,6 +218,11 @@ with tab1:
                     bad_rows = df_num.index[df_num.isna().any(axis=1)].tolist()
                     st.error(f"Non-numeric or missing values in rows: {bad_rows}. Please clean your CSV.")
                 else:
+                    # Persist for other tabs
+                    st.session_state["df_num"] = df_num
+                    st.session_state["y_true"] = y_true
+                    st.session_state["y_true_str"] = y_true_str
+
                     X = df_num.values
                     preds = model.predict(X)
                     labels_pred = le.inverse_transform(preds)
@@ -209,6 +232,13 @@ with tab1:
                     st.balloons()
             except Exception as e:
                 st.error(f"Error processing file: {e}")
+
+        # Optional data clearer
+        if st.button("Clear loaded data"):
+            st.session_state["df_num"] = None
+            st.session_state["y_true"] = None
+            st.session_state["y_true_str"] = None
+            st.rerun()
 
     with c_right:
         st.markdown("**Single sample**")
@@ -232,26 +262,15 @@ with tab1:
 
 with tab2:
     st.subheader("Exploratory Data Analysis")
-    st.caption("Use any data uploaded in the Workflow tab to drive these visuals; if none uploaded yet, paste a CSV there first.")
-    # For EDA, re-use the last uploaded (simple cache via session_state)
-    if "last_df_num" not in st.session_state:
-        st.session_state.last_df_num = None
-
-    # Persist df_num from tab1 if available
-    if uploaded is not None:
-        try:
-            st.session_state.last_df_num = prepare_features(pd.read_csv(uploaded, header=None))[0]
-        except Exception:
-            pass
-
-    df_num = st.session_state.last_df_num
+    st.caption("Upload data in the Workflow tab to enable EDA.")
+    df_num = st.session_state.get("df_num", None)
     if df_num is None:
-        st.info("Upload data in the Workflow tab to enable EDA.")
+        st.info("No data loaded yet.")
     else:
         c1, c2, c3 = st.columns(3)
         with c1:
             st.markdown("<div class='section-title'>Feature histogram</div>", unsafe_allow_html=True)
-            feat_idx = st.number_input("Feature index (0-59)", min_value=0, max_value=59, value=0, step=1, key="hist_idx")
+            feat_idx = st.number_input("Feature index (0-59)", min_value=0, max_value=59, value=0, step=1, key="eda_hist_idx")
             fig, ax = plt.subplots(figsize=(4.2, 3.2))
             ax.hist(df_num.iloc[:, int(feat_idx)], bins=20, color=palette["accent"], alpha=0.9)
             ax.set_title(f"Feature {int(feat_idx)} distribution")
@@ -287,33 +306,32 @@ with tab2:
 with tab3:
     st.subheader("Model Evaluation (when labels present)")
     st.caption("Upload a CSV containing 60 features plus the trailing R/M label in the Workflow tab to enable metrics.")
-    if "last_df_num" not in st.session_state or st.session_state.last_df_num is None or uploaded is None:
+    df_num = st.session_state.get("df_num", None)
+    y_true = st.session_state.get("y_true", None)
+    if df_num is None:
         st.info("Upload labeled data in the Workflow tab to evaluate.")
+    elif y_true is None:
+        st.info("Ground-truth labels not detected; cannot compute metrics.")
     else:
         try:
-            raw = pd.read_csv(uploaded, header=None)
-            df_num, y_true, y_true_str = prepare_features(raw)
-            if y_true is None:
-                st.info("Ground-truth labels not detected; cannot compute metrics.")
-            else:
-                X = df_num.values
-                preds = model.predict(X)
-                labels = le.inverse_transform([0, 1])
+            X = df_num.values
+            preds = model.predict(X)
+            labels = le.inverse_transform([0, 1])
 
-                cA, cB = st.columns(2)
-                with cA:
-                    st.markdown("<div class='section-title'>Confusion Matrix</div>", unsafe_allow_html=True)
-                    fig = plot_confusion_matrix(y_true, preds, labels=labels)
+            cA, cB = st.columns(2)
+            with cA:
+                st.markdown("<div class='section-title'>Confusion Matrix</div>", unsafe_allow_html=True)
+                fig = plot_confusion_matrix(y_true, preds, labels=labels)
+                st.pyplot(fig, use_container_width=True)
+
+            with cB:
+                st.markdown("<div class='section-title'>ROC Curve</div>", unsafe_allow_html=True)
+                scores = compute_scores_for_roc(X)
+                if scores is not None:
+                    fig = plot_roc(y_true, scores)
                     st.pyplot(fig, use_container_width=True)
-
-                with cB:
-                    st.markdown("<div class='section-title'>ROC Curve</div>", unsafe_allow_html=True)
-                    scores = compute_scores_for_roc(X)
-                    if scores is not None:
-                        fig = plot_roc(y_true, scores)
-                        st.pyplot(fig, use_container_width=True)
-                    else:
-                        st.info("Classifier does not provide probabilities or decision scores; ROC unavailable.")
+                else:
+                    st.info("Classifier does not provide probabilities or decision scores; ROC unavailable.")
         except Exception as e:
             st.error(f"Evaluation failed: {e}")
 
