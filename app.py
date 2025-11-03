@@ -34,7 +34,7 @@ with st.sidebar:
 def inject_css(pal, dark=True):
     base_bg = pal["bg"] if dark else "#B7E5CD"
     base_text = pal["text"] if dark else "#0F172A"
-    secondary_bg = pal["bg2"] if dark else "#F5F7FB"
+    secondary_bg = pal["bg2"] if dark else "#B7E5CD"
     css = f"""
     <style>
     .stApp {{
