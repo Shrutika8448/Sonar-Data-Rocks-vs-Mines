@@ -17,11 +17,12 @@ st.set_page_config(page_title="SONAR: Rocks vs Mines", page_icon="⚒️", layou
 
 # Color palettes (material-ish)
 PALETTES = {
+    "Wmerald": {"primary": "#00674F", "bg": "#0B1416", "bg2": "#112023", "text": "#F1F5F9", "accent": "#14B8A6"},
     "Blue":   {"primary": "#4EA1FF", "bg": "#0E1117", "bg2": "#1B1F24", "text": "#FAFAFA", "accent": "#2C7FB8"},
     "Teal":   {"primary": "#2DD4BF", "bg": "#0B1416", "bg2": "#112023", "text": "#F1F5F9", "accent": "#14B8A6"},
     "Purple": {"primary": "#A78BFA", "bg": "#0F0B16", "bg2": "#1B1426", "text": "#FAF5FF", "accent": "#7C3AED"},
     "Orange": {"primary": "#F59E0B", "bg": "#0F0E0B", "bg2": "#1C1A14", "text": "#FFF7ED", "accent": "#D97706"},
-    "Wmerald":   {"primary": "#00674F", "bg": "#0B1416", "bg2": "#112023", "text": "#F1F5F9", "accent": "#14B8A6"},
+    
 }
 
 # ---------- Sidebar: Theme / Palette ----------
