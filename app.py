@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -12,59 +11,105 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.metrics import confusion_matrix, roc_curve, auc
 
+# ---------- Page & basic setup ----------
 st.set_page_config(page_title="Sonar Rocks vs Mines", page_icon="🌊", layout="wide")
 
-# ---- Load artifacts ----
+# Color palettes (material-ish)
+PALETTES = {
+    "Blue":   {"primary": "#4EA1FF", "bg": "#0E1117", "bg2": "#1B1F24", "text": "#FAFAFA", "accent": "#2C7FB8"},
+    "Teal":   {"primary": "#2DD4BF", "bg": "#0B1416", "bg2": "#112023", "text": "#F1F5F9", "accent": "#14B8A6"},
+    "Purple": {"primary": "#A78BFA", "bg": "#0F0B16", "bg2": "#1B1426", "text": "#FAF5FF", "accent": "#7C3AED"},
+    "Orange": {"primary": "#F59E0B", "bg": "#0F0E0B", "bg2": "#1C1A14", "text": "#FFF7ED", "accent": "#D97706"},
+}
+
+# ---------- Sidebar: Theme / Palette ----------
+with st.sidebar:
+    st.header("🎨 Appearance")
+    palette_name = st.selectbox("Color palette", list(PALETTES.keys()), index=0)
+    palette = PALETTES[palette_name]
+    dark_mode = st.toggle("Use dark background", value=True)
+
+# Inject CSS for palette
+def inject_css(pal, dark=True):
+    base_bg = pal["bg"] if dark else "#FFFFFF"
+    base_text = pal["text"] if dark else "#0F172A"
+    secondary_bg = pal["bg2"] if dark else "#F5F7FB"
+    css = f"""
+    <style>
+    .stApp {{
+        background: linear-gradient(160deg, {base_bg} 0%, {secondary_bg} 100%) !important;
+        color: {base_text} !important;
+    }}
+    [data-testid="stSidebar"] {{
+        background-color: {secondary_bg} !important;
+        color: {base_text} !important;
+    }}
+    .metric-card {{
+        border-radius: 10px;
+        padding: 12px 16px;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255,255,255,0.03);
+    }}
+    hr.custom {{
+        margin: 0.75rem 0 1rem 0;
+        border: none;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, {pal["primary"]}, transparent);
+    }}
+    .section-title {{
+        font-weight: 600;
+        color: {pal["primary"]};
+    }}
+    .stButton>button {{
+        background: {pal["primary"]} !important;
+        color: #0B0B0C !important;
+        border: 0 !important;
+        border-radius: 8px !important;
+    }}
+    .accent-text {{ color: {pal["accent"]}; }}
+    </style>
+    """
+    st.markdown(css, unsafe_allow_html=True)
+
+inject_css(palette, dark=dark_mode)
+
+# ---------- Load artifacts ----------
 @st.cache_resource
 def load_artifacts():
-    try:
-        model = joblib.load("sonar_model.pkl")   # sklearn Pipeline with scaler + classifier
-        le = joblib.load("label_encoder.pkl")    # LabelEncoder for ['R','M']
-    except Exception as e:
-        st.error(f"Failed to load model artifacts: {e}")
-        st.stop()
+    model = joblib.load("sonar_model.pkl")   # sklearn Pipeline with scaler + classifier
+    le = joblib.load("label_encoder.pkl")    # LabelEncoder for ['R','M']
     return model, le
 
 model, le = load_artifacts()
 
-st.title("Sonar Rocks vs Mines Classifier")
-st.write("Upload CSV with either 60 features only, or the original Sonar file with 60 features + trailing R/M label.")
-
-# ---- Helpers ----
+# ---------- Helpers ----------
 ZERO_WIDTH_PATTERN = re.compile(r'[\u200B-\u200D\uFEFF]')
 
 def strip_zero_width(s: str) -> str:
     return ZERO_WIDTH_PATTERN.sub("", s).strip()
 
 def clean_df_zero_width(df: pd.DataFrame) -> pd.DataFrame:
-    # Remove zero-width and BOM characters from every cell (strings only)
     return df.applymap(lambda x: strip_zero_width(x) if isinstance(x, str) else x)
 
 def prepare_features(df_raw: pd.DataFrame):
-    """
-    Returns:
-      df_num: numeric features DataFrame with exactly 60 columns
-      y_true: np.ndarray of encoded labels if present, else None
-      y_true_str: np.ndarray of string labels ['R','M'] if present, else None
-    """
-    # Remove zero-width chars possibly introduced by copy-paste
+    # Remove zero-width chars possibly introduced by copy-paste/upload
     df_raw = clean_df_zero_width(df_raw)
 
-    # Try to preserve a possible label column before coercion
+    # Preserve possible label column before coercion
     y_true_str = None
     if df_raw.shape[1] >= 61:
         last_col = df_raw.iloc[:, -1]
         if last_col.dtype == object:
             y_true_str = last_col.astype(str).values
 
-    # Coerce to numeric; label column becomes NaN
+    # Coerce to numeric; label becomes NaN
     df_num = df_raw.apply(pd.to_numeric, errors="coerce")
 
-    # If 61 columns and last becomes all NaN (from R/M), drop it
+    # If 61 columns and last is all NaN (from R/M), drop it
     if df_num.shape[1] == 61 and df_num.iloc[:, -1].isna().all():
         df_num = df_num.iloc[:, :-1]
 
-    # If there are more than 60 columns, keep the first 60
+    # If more than 60 columns, keep first 60
     if df_num.shape[1] > 60:
         df_num = df_num.iloc[:, :60]
 
@@ -72,7 +117,7 @@ def prepare_features(df_raw: pd.DataFrame):
     y_true = None
     if y_true_str is not None and df_num.shape[1] == 60:
         try:
-            y_true = le.transform(y_true_str)  # requires same encoder as training
+            y_true = le.transform(y_true_str)
         except Exception:
             y_true = None
 
@@ -92,7 +137,7 @@ def predict_array(arr):
 
 def plot_confusion_matrix(y_true, y_pred, labels):
     cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
-    fig, ax = plt.subplots(figsize=(4, 3))
+    fig, ax = plt.subplots(figsize=(4.2, 3.2))
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
                 xticklabels=labels, yticklabels=labels, ax=ax)
     ax.set_xlabel("Predicted")
@@ -103,8 +148,8 @@ def plot_confusion_matrix(y_true, y_pred, labels):
 def plot_roc(y_true, scores):
     fpr, tpr, _ = roc_curve(y_true, scores)
     roc_auc = auc(fpr, tpr)
-    fig, ax = plt.subplots(figsize=(4, 3))
-    ax.plot(fpr, tpr, label=f"AUC = {roc_auc:.3f}")
+    fig, ax = plt.subplots(figsize=(4.2, 3.2))
+    ax.plot(fpr, tpr, color=palette["primary"], label=f"AUC = {roc_auc:.3f}")
     ax.plot([0, 1], [0, 1], "k--", alpha=0.5)
     ax.set_xlabel("False Positive Rate")
     ax.set_ylabel("True Positive Rate")
@@ -113,7 +158,6 @@ def plot_roc(y_true, scores):
     return fig
 
 def compute_scores_for_roc(X):
-    # Prefer predict_proba, else use decision_function if available
     if hasattr(model, "predict_proba"):
         try:
             proba = model.predict_proba(X)
@@ -132,123 +176,154 @@ def compute_scores_for_roc(X):
             pass
     return None
 
-# ---- Upload and predict ----
-uploaded = st.file_uploader("Upload CSV (60 features, or 60+label R/M)", type=["csv"])
+# ---------- Header ----------
+st.title("🌊 Sonar Rocks vs Mines")
+st.markdown('<hr class="custom">', unsafe_allow_html=True)
 
-if uploaded is not None:
-    try:
-        raw = pd.read_csv(uploaded, header=None)
-        df_num, y_true, y_true_str = prepare_features(raw)
+# ---------- Tabs ----------
+tab1, tab2, tab3, tab4 = st.tabs(["🚀 Workflow", "🔎 EDA", "📊 Evaluation", "⚙️ Settings"])
 
-        # Validate numeric shape/values (StandardScaler requires finite numbers)
-        if df_num.shape[1] != 60:
-            st.error(f"Expected 60 feature columns after cleaning, found {df_num.shape[1]}.")
-        elif df_num.isna().any().any() or np.isinf(df_num.to_numpy()).any():
-            bad_rows = df_num.index[df_num.isna().any(axis=1)].tolist()
-            st.error(f"Non-numeric or missing values in rows: {bad_rows}. Please clean your CSV.")
-        else:
-            X = df_num.values
-            preds = model.predict(X)
-            labels_pred = le.inverse_transform(preds)
+with tab1:
+    st.subheader("Upload & Predict")
+    c_left, c_right = st.columns([2, 1])
 
-            st.subheader("Predictions")
-            st.dataframe(pd.DataFrame({"prediction": labels_pred}))
+    with c_left:
+        uploaded = st.file_uploader("Upload CSV (60 features, or 60+label R/M)", type=["csv"])
+        if uploaded is not None:
+            try:
+                raw = pd.read_csv(uploaded, header=None)
+                df_num, y_true, y_true_str = prepare_features(raw)
 
-            # ===== EDA section =====
-            st.markdown("### EDA")
-            c1, c2, c3 = st.columns(3)
+                if df_num.shape[1] != 60:
+                    st.error(f"Expected 60 feature columns after cleaning, found {df_num.shape[1]}.")
+                elif df_num.isna().any().any() or np.isinf(df_num.to_numpy()).any():
+                    bad_rows = df_num.index[df_num.isna().any(axis=1)].tolist()
+                    st.error(f"Non-numeric or missing values in rows: {bad_rows}. Please clean your CSV.")
+                else:
+                    X = df_num.values
+                    preds = model.predict(X)
+                    labels_pred = le.inverse_transform(preds)
 
-            with c1:
-                st.caption("Feature histogram")
-                feat_idx = st.number_input("Feature index (0-59)", min_value=0, max_value=59, value=0, step=1)
-                fig, ax = plt.subplots(figsize=(4, 3))
-                ax.hist(df_num.iloc[:, int(feat_idx)], bins=20, color="#2c7fb8", alpha=0.9)
-                ax.set_title(f"Feature {int(feat_idx)} distribution")
-                ax.set_xlabel("Value")
-                ax.set_ylabel("Count")
+                    st.markdown("**Predictions**")
+                    st.dataframe(pd.DataFrame({"prediction": labels_pred}), use_container_width=True)
+                    st.balloons()
+            except Exception as e:
+                st.error(f"Error processing file: {e}")
+
+    with c_right:
+        st.markdown("**Single sample**")
+        vals = st.text_area("Enter 60 comma-separated values (e.g., 0.02,0.0371,...)", height=140)
+        if st.button("Predict single sample"):
+            try:
+                tokens = [strip_zero_width(x) for x in vals.split(",")]
+                arr = [float(t) for t in tokens if t != ""]
+                if len(arr) != 60:
+                    st.error(f"Expected 60 values, got {len(arr)}.")
+                else:
+                    label, proba = predict_array(arr)
+                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                    st.markdown(f"**Result:** <span class='accent-text'>{label}</span>", unsafe_allow_html=True)
+                    if proba is not None and len(proba) == 2:
+                        classes = le.inverse_transform([0, 1])
+                        st.write({"probabilities": {classes[0]: float(proba[0]), classes[1]: float(proba[1])}})
+                    st.markdown('</div>', unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+with tab2:
+    st.subheader("Exploratory Data Analysis")
+    st.caption("Use any data uploaded in the Workflow tab to drive these visuals; if none uploaded yet, paste a CSV there first.")
+    # For EDA, re-use the last uploaded (simple cache via session_state)
+    if "last_df_num" not in st.session_state:
+        st.session_state.last_df_num = None
+
+    # Persist df_num from tab1 if available
+    if uploaded is not None:
+        try:
+            st.session_state.last_df_num = prepare_features(pd.read_csv(uploaded, header=None))[0]
+        except Exception:
+            pass
+
+    df_num = st.session_state.last_df_num
+    if df_num is None:
+        st.info("Upload data in the Workflow tab to enable EDA.")
+    else:
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown("<div class='section-title'>Feature histogram</div>", unsafe_allow_html=True)
+            feat_idx = st.number_input("Feature index (0-59)", min_value=0, max_value=59, value=0, step=1, key="hist_idx")
+            fig, ax = plt.subplots(figsize=(4.2, 3.2))
+            ax.hist(df_num.iloc[:, int(feat_idx)], bins=20, color=palette["accent"], alpha=0.9)
+            ax.set_title(f"Feature {int(feat_idx)} distribution")
+            ax.set_xlabel("Value")
+            ax.set_ylabel("Count")
+            st.pyplot(fig, use_container_width=True)
+
+        with c2:
+            st.markdown("<div class='section-title'>Correlation (subset)</div>", unsafe_allow_html=True)
+            n_heat = st.slider("Columns for heatmap", min_value=5, max_value=60, value=20, step=5, key="heat_cols")
+            corr = df_num.iloc[:, :n_heat].corr()
+            fig, ax = plt.subplots(figsize=(5.2, 4.2))
+            sns.heatmap(corr, cmap="mako", center=0, ax=ax)
+            ax.set_title(f"Correlation heatmap (first {n_heat} features)")
+            st.pyplot(fig, use_container_width=True)
+
+        with c3:
+            st.markdown("<div class='section-title'>PCA (2D) scatter</div>", unsafe_allow_html=True)
+            try:
+                X_scaled = StandardScaler().fit_transform(df_num.values)
+                pca = PCA(n_components=2)
+                X_pca = pca.fit_transform(X_scaled)
+                color_scheme = st.radio("Color map", ["coolwarm", "viridis", "plasma"], horizontal=True, key="pca_cmap")
+                fig, ax = plt.subplots(figsize=(4.2, 3.2))
+                ax.scatter(X_pca[:, 0], X_pca[:, 1], c=X_pca[:, 0], cmap=color_scheme, alpha=0.85, s=28)
+                ax.set_title("PCA (2 components)")
+                ax.set_xlabel("PC1")
+                ax.set_ylabel("PC2")
                 st.pyplot(fig, use_container_width=True)
+            except Exception as e:
+                st.info(f"PCA plot unavailable: {e}")
 
-            with c2:
-                st.caption("Correlation heatmap (subset)")
-                n_heat = st.slider("Columns for heatmap", min_value=5, max_value=60, value=20, step=5)
-                corr = df_num.iloc[:, :n_heat].corr()
-                fig, ax = plt.subplots(figsize=(5, 4))
-                sns.heatmap(corr, cmap="coolwarm", center=0, ax=ax)
-                ax.set_title(f"Correlation heatmap (first {n_heat} features)")
-                st.pyplot(fig, use_container_width=True)
+with tab3:
+    st.subheader("Model Evaluation (when labels present)")
+    st.caption("Upload a CSV containing 60 features plus the trailing R/M label in the Workflow tab to enable metrics.")
+    if "last_df_num" not in st.session_state or st.session_state.last_df_num is None or uploaded is None:
+        st.info("Upload labeled data in the Workflow tab to evaluate.")
+    else:
+        try:
+            raw = pd.read_csv(uploaded, header=None)
+            df_num, y_true, y_true_str = prepare_features(raw)
+            if y_true is None:
+                st.info("Ground-truth labels not detected; cannot compute metrics.")
+            else:
+                X = df_num.values
+                preds = model.predict(X)
+                labels = le.inverse_transform([0, 1])
 
-            with c3:
-                st.caption("PCA (2D) scatter")
-                try:
-                    X_scaled = StandardScaler().fit_transform(X)
-                    pca = PCA(n_components=2)
-                    X_pca = pca.fit_transform(X_scaled)
-                    color_choice = st.radio("Color by", ["Predicted label", "Actual label (if present)"], index=0)
-                    if color_choice.startswith("Actual") and y_true is not None:
-                        hue = y_true
-                        legend_labels = le.inverse_transform([0, 1])
-                    else:
-                        hue = preds
-                        legend_labels = le.inverse_transform([0, 1])
-
-                    fig, ax = plt.subplots(figsize=(4, 3))
-                    scatter = ax.scatter(X_pca[:, 0], X_pca[:, 1], c=hue, cmap="coolwarm", alpha=0.8)
-                    ax.set_title("PCA (2 components)")
-                    ax.set_xlabel("PC1")
-                    ax.set_ylabel("PC2")
-                    handles = [plt.Line2D([0], [0], marker='o', color='w',
-                                          label=legend_labels[i], markerfacecolor=plt.cm.coolwarm([0,1][i]), markersize=8)
-                               for i in range(2)]
-                    ax.legend(handles=handles, title="Class", loc="best")
-                    st.pyplot(fig, use_container_width=True)
-                except Exception as e:
-                    st.info(f"PCA plot unavailable: {e}")
-
-            # ===== Evaluation (when labels available) =====
-            st.markdown("### Evaluation (requires ground-truth labels)")
-            if y_true is not None:
-                col_a, col_b = st.columns(2)
-
-                with col_a:
-                    st.caption("Confusion matrix")
-                    fig = plot_confusion_matrix(y_true, preds, labels=le.inverse_transform([0, 1]))
+                cA, cB = st.columns(2)
+                with cA:
+                    st.markdown("<div class='section-title'>Confusion Matrix</div>", unsafe_allow_html=True)
+                    fig = plot_confusion_matrix(y_true, preds, labels=labels)
                     st.pyplot(fig, use_container_width=True)
 
-                with col_b:
-                    st.caption("ROC curve")
+                with cB:
+                    st.markdown("<div class='section-title'>ROC Curve</div>", unsafe_allow_html=True)
                     scores = compute_scores_for_roc(X)
                     if scores is not None:
                         fig = plot_roc(y_true, scores)
                         st.pyplot(fig, use_container_width=True)
                     else:
-                        st.info("Classifier does not expose probabilities or decision scores; ROC unavailable.")
-            else:
-                st.info("Ground-truth labels not detected; showing EDA and predictions only.")
-    except Exception as e:
-        st.error(f"Error processing file: {e}")
+                        st.info("Classifier does not provide probabilities or decision scores; ROC unavailable.")
+        except Exception as e:
+            st.error(f"Evaluation failed: {e}")
 
-# ---- Manual single-sample path ----
-st.markdown("---")
-st.subheader("Or paste a single sample")
-vals = st.text_area("Enter 60 comma-separated values (e.g., 0.02,0.0371,...)", height=100)
-
-if st.button("Predict"):
-    try:
-        tokens = [strip_zero_width(x) for x in vals.split(",")]
-        arr = [float(t) for t in tokens if t != ""]
-        if len(arr) != 60:
-            st.error(f"Expected 60 values, got {len(arr)}.")
-        else:
-            label, proba = predict_array(arr)
-            st.success(f"Prediction: {label}")
-            if proba is not None and len(proba) == 2:
-                classes = le.inverse_transform([0, 1])
-                st.write({"probabilities": {classes[0]: float(proba[0]), classes[1]: float(proba[1])}})
-    except Exception as e:
-        st.error(f"Error: {e}")
-
-# ---- Sidebar guidance ----
-with st.sidebar:
-    st.caption("Input format")
-    st.write("- 60 numeric columns only for inference; if your CSV has the R/M label as the 61st column, it will be auto-dropped during cleaning.")
-    st.write("- No header row is needed; values must be finite numbers.")
+with tab4:
+    st.subheader("Settings & Tips")
+    st.markdown("- Use the sidebar to switch color palettes and background mode.", unsafe_allow_html=True)
+    st.markdown("- Upload the original Sonar CSV (60 features + R/M) for evaluation plots; the label column is auto-dropped for prediction.", unsafe_allow_html=True)
+    st.markdown("- Paste single samples in the Workflow tab; invisible characters are auto-removed.", unsafe_allow_html=True)
+    st.markdown('<hr class="custom">', unsafe_allow_html=True)
+    st.code(
+        "pip install streamlit scikit-learn pandas numpy joblib matplotlib seaborn",
+        language="bash"
+    )
