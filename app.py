@@ -251,7 +251,7 @@ if "eval_threshold" not in st.session_state:
 inject_hide_chrome(st.session_state["hide_chrome"])
 
 # ---------- Tabs ----------
-tab1, tab2, tab3, tab4 = st.tabs(["🚀 Workflow", "🔎 EDA", "📊 Evaluation", "⚙️ Settings"])
+tab1, tab2, tab3, tab4 = st.tabs(["Workflow", "EDA", "Evaluation", "Settings"])
 
 with tab1:
     st.subheader("Upload & Predict")
