@@ -27,7 +27,7 @@ with st.sidebar:
     st.header("🎨 Appearance")
     palette_name = st.selectbox("Color palette", list(PALETTES.keys()), index=0)
     palette = PALETTES[palette_name]
-    dark_mode = st.toggle("Use dark background", value=True)
+    dark_mode = st.toggle("Use dark background", value=False)
 
 # Inject CSS for palette
 def inject_css(pal, dark=True):
