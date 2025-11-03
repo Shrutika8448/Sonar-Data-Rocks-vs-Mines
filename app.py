@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import joblib
 import re
+import io
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -12,7 +13,7 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import confusion_matrix, roc_curve, auc
 
 # ---------- Page & basic setup ----------
-st.set_page_config(page_title="Sonar Rocks vs Mines", page_icon="⚒️", layout="wide")
+st.set_page_config(page_title="SONAR: Rocks vs Mines", page_icon="⚒️", layout="wide")
 
 # Color palettes (material-ish)
 PALETTES = {
@@ -73,6 +74,20 @@ def inject_css(pal, dark=True):
 
 inject_css(palette, dark=dark_mode)
 
+# Optional chrome hider (controlled from Settings tab via session flag)
+def inject_hide_chrome(hide: bool):
+    if not hide:
+        return
+    css = """
+    <style>
+    [data-testid="stToolbar"] { visibility: hidden !important; }
+    footer { visibility: hidden !important; }
+    #MainMenu { visibility: hidden !important; }
+    header { visibility: hidden !important; }
+    </style>
+    """
+    st.markdown(css, unsafe_allow_html=True)
+
 # ---------- Load artifacts ----------
 @st.cache_resource
 def load_artifacts():
@@ -102,28 +117,20 @@ def prepare_features(df_raw: pd.DataFrame):
       y_true: np.ndarray of encoded labels if present, else None
       y_true_str: np.ndarray of string labels ['R','M'] if present, else None
     """
-    # Remove zero-width chars possibly introduced by copy-paste/upload
     df_raw = clean_df_zero_width(df_raw)
-
-    # Preserve possible label column before coercion
     y_true_str = None
     if df_raw.shape[1] >= 61:
         last_col = df_raw.iloc[:, -1]
         if last_col.dtype == object:
             y_true_str = last_col.astype(str).values
 
-    # Coerce to numeric; label becomes NaN
     df_num = df_raw.apply(pd.to_numeric, errors="coerce")
 
-    # If 61 columns and last is all NaN (from R/M), drop it
     if df_num.shape[1] == 61 and df_num.iloc[:, -1].isna().all():
         df_num = df_num.iloc[:, :-1]
-
-    # If more than 60 columns, keep first 60
     if df_num.shape[1] > 60:
         df_num = df_num.iloc[:, :60]
 
-    # Encode labels if we detected R/M
     y_true = None
     if y_true_str is not None and df_num.shape[1] == 60:
         try:
@@ -186,17 +193,62 @@ def compute_scores_for_roc(X):
             pass
     return None
 
+def apply_threshold(scores, threshold=0.5):
+    # scores are P(class=1) or decision_function; assume positive class is index 1 -> 'M'
+    # If decision_function provided, we map via 0 threshold by default and shift via percentile-like scaling
+    # Here we assume scores in [0,1] for simplicity when predict_proba exists.
+    return (scores >= threshold).astype(int)
+
+def get_model_info():
+    try:
+        from sklearn import __version__ as skl_ver
+        info = {"sklearn_version": skl_ver}
+    except Exception:
+        info = {"sklearn_version": "unknown"}
+    try:
+        steps = getattr(model, "steps", None)
+        if steps is not None:
+            info["pipeline_steps"] = [name for name, _ in steps]
+        else:
+            info["pipeline_steps"] = ["<not a Pipeline>"]
+        # Try to get final estimator params
+        final_est = model[-1] if steps is not None else model
+        info["estimator"] = final_est.__class__.__name__
+        if hasattr(final_est, "get_params"):
+            info["params"] = {k: v for k, v in final_est.get_params().items() if isinstance(v, (int, float, str, bool))}
+    except Exception:
+        pass
+    return info
+
+def download_csv_bytes(df: pd.DataFrame, filename: str) -> bytes:
+    buf = io.StringIO()
+    df.to_csv(buf, index=False, header=False)
+    return buf.getvalue().encode("utf-8")
+
+def template_features_csv(rows=1):
+    # Create a simple template of zeros within [0,1] for 60 features
+    return pd.DataFrame(np.zeros((rows, 60)))
+
 # ---------- Header ----------
 st.title("⚒️ SONAR: Rocks vs Mines")
 st.markdown('<hr class="custom">', unsafe_allow_html=True)
 
-# Initialize session storage for cross-tab usage
+# Initialize session storage for cross-tab usage and settings
 if "df_num" not in st.session_state:
     st.session_state["df_num"] = None
 if "y_true" not in st.session_state:
     st.session_state["y_true"] = None
 if "y_true_str" not in st.session_state:
     st.session_state["y_true_str"] = None
+if "celebrate_mine" not in st.session_state:
+    st.session_state["celebrate_mine"] = True
+if "hide_chrome" not in st.session_state:
+    st.session_state["hide_chrome"] = False
+if "eval_threshold" not in st.session_state:
+    st.session_state["eval_threshold"] = 0.50
+
+# Inject chrome hider based on current setting
+inject_hide_chrome(st.session_state["hide_chrome"])
 
 # ---------- Tabs ----------
 tab1, tab2, tab3, tab4 = st.tabs(["🚀 Workflow", "🔎 EDA", "📊 Evaluation", "⚙️ Settings"])
@@ -229,7 +281,6 @@ with tab1:
 
                     st.markdown("**Predictions**")
                     st.dataframe(pd.DataFrame({"prediction": labels_pred}), use_container_width=True)
-                    # NOTE: Removed balloons here; balloons will only trigger for single-sample 'M'
             except Exception as e:
                 st.error(f"Error processing file: {e}")
 
@@ -257,8 +308,8 @@ with tab1:
                         classes = le.inverse_transform([0, 1])
                         st.write({"probabilities": {classes[0]: float(proba[0]), classes[1]: float(proba[1])}})
                     st.markdown('</div>', unsafe_allow_html=True)
-                    # Trigger balloons only if predicted label is 'M' (Mine)
-                    if label == "M":
+                    # Balloons only if predicted label is 'M' (Mine) and enabled in Settings
+                    if label == "M" and st.session_state["celebrate_mine"]:
                         st.balloons()
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -318,7 +369,20 @@ with tab3:
     else:
         try:
             X = df_num.values
-            preds = model.predict(X)
+            # Use default predictions
+            base_preds = model.predict(X)
+
+            # Thresholded predictions if we have scores
+            scores = compute_scores_for_roc(X)
+            if scores is not None:
+                thr = st.session_state["eval_threshold"]
+                thr_preds = apply_threshold(scores, threshold=thr)
+                use_thr = st.toggle("Use custom probability threshold for metrics", value=False)
+                preds = thr_preds if use_thr else base_preds
+            else:
+                st.info("Classifier does not provide probabilities or decision scores; thresholding unavailable.")
+                preds = base_preds
+
             labels = le.inverse_transform([0, 1])
 
             cA, cB = st.columns(2)
@@ -329,20 +393,60 @@ with tab3:
 
             with cB:
                 st.markdown("<div class='section-title'>ROC Curve</div>", unsafe_allow_html=True)
-                scores = compute_scores_for_roc(X)
                 if scores is not None:
                     fig = plot_roc(y_true, scores)
                     st.pyplot(fig, use_container_width=True)
                 else:
-                    st.info("Classifier does not provide probabilities or decision scores; ROC unavailable.")
+                    st.info("ROC unavailable for this classifier.")
         except Exception as e:
             st.error(f"Evaluation failed: {e}")
 
 with tab4:
-    st.subheader("Settings & Tips")
-    st.markdown("- Use the sidebar to switch color palettes and background mode.", unsafe_allow_html=True)
-    st.markdown("- Upload the original Sonar CSV (60 features + R/M) for evaluation plots; the label column is auto-dropped for prediction.", unsafe_allow_html=True)
-    st.markdown("- Paste single samples in the Workflow tab; invisible characters are auto-removed.", unsafe_allow_html=True)
+    st.subheader("Settings & Tools")
+    # Functional toggles
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Celebration**")
+        st.session_state["celebrate_mine"] = st.checkbox("Play balloons when single sample predicts 'M' (Mine)", value=st.session_state["celebrate_mine"])
+        st.caption("Balloons are triggered only for the single-sample path and only when the predicted label is 'M'.")
+    with c2:
+        st.markdown("**UI Chrome**")
+        new_hide = st.checkbox("Hide Streamlit menu & footer (CSS)", value=st.session_state["hide_chrome"])
+        if new_hide != st.session_state["hide_chrome"]:
+            st.session_state["hide_chrome"] = new_hide
+            st.rerun()
+
+    st.markdown('<hr class="custom">', unsafe_allow_html=True)
+
+    # Threshold controls for evaluation
+    st.markdown("**Evaluation Threshold**")
+    st.session_state["eval_threshold"] = st.slider("Probability threshold for class 'M' (if supported by model)", 0.05, 0.95, st.session_state["eval_threshold"], 0.01)
+    st.caption("If the classifier exposes probabilities or decision scores, metrics can use this custom threshold for the positive class 'M'.")
+
+    st.markdown('<hr class="custom">', unsafe_allow_html=True)
+
+    # Downloads: template and cleaned data
+    st.markdown("**Downloads**")
+    colT, colD = st.columns(2)
+    with colT:
+        tpl = template_features_csv(rows=1)
+        tpl_bytes = download_csv_bytes(tpl, "sonar_features_template.csv")
+        st.download_button("Download features-only template CSV", tpl_bytes, file_name="sonar_features_template.csv", mime="text/csv")
+    with colD:
+        if st.session_state.get("df_num", None) is not None:
+            cleaned = st.session_state["df_num"]
+            cleaned_bytes = download_csv_bytes(cleaned, "cleaned_features.csv")
+            st.download_button("Download cleaned features CSV", cleaned_bytes, file_name="cleaned_features.csv", mime="text/csv")
+        else:
+            st.button("Download cleaned features CSV", disabled=True)
+
+    st.markdown('<hr class="custom">', unsafe_allow_html=True)
+
+    # Model info
+    with st.expander("Model & Environment Info"):
+        info = get_model_info()
+        st.json(info)
+        st.caption("Charts are rendered with Matplotlib/Seaborn via st.pyplot; preprocessing uses scikit-learn tools consistent with training.")
     st.markdown('<hr class="custom">', unsafe_allow_html=True)
     st.code(
         "pip install streamlit scikit-learn pandas numpy joblib matplotlib seaborn",
