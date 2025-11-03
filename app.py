@@ -32,7 +32,7 @@ with st.sidebar:
 
 # Inject CSS for palette
 def inject_css(pal, dark=True):
-    base_bg = pal["bg"] if dark else "#8FABD4"
+    base_bg = pal["bg"] if dark else "#B7E5CD"
     base_text = pal["text"] if dark else "#0F172A"
     secondary_bg = pal["bg2"] if dark else "#F5F7FB"
     css = f"""
