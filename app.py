@@ -63,7 +63,7 @@ def inject_css(pal, dark=True):
     }}
     .stButton>button {{
         background: {pal["primary"]} !important;
-        color: #313647 !important;
+        color: #F4F4F4 !important;
         border: 0 !important;
         border-radius: 8px !important;
     }}
