@@ -198,7 +198,7 @@ def page_home():
         # reliable Unsplash images (add parameters to ensure load)
         st.image("rock.jpg",
                  caption="Rock Image", use_column_width=True)
-        st.image("mine",
+        st.image("mine.jpg",
                  caption="Mine Image", use_column_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
