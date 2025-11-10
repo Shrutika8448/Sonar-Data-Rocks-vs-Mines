@@ -72,7 +72,7 @@ page = query_params.get("page", ["home"])[0]
 @st.cache_resource
 def train_model():
     try:
-        df = pd.read_csv("https://raw.githubusercontent.com/ankurdome/sonar-dataset/main/sonar.csv", header=None)
+        df = pd.read_csv("sonar.csv", header=None)
     except:
         st.warning("⚠️ Online dataset unavailable. Loading local fallback...")
         df = pd.read_csv("sonar.csv", header=None)
@@ -97,9 +97,9 @@ if page == "home":
 
     col1, col2 = st.columns(2)
     with col1:
-        st.image("https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/sonar-images/main/rock.jpg", caption="Rock", use_container_width=True)
+        st.image("rock.jpg", caption="Rock", use_container_width=True)
     with col2:
-        st.image("https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/sonar-images/main/mine.jpg", caption="Mine", use_container_width=True)
+        st.image("mine.jpg", caption="Mine", use_container_width=True)
 
     st.subheader("📤 Upload Dataset")
     uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
