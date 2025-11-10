@@ -14,7 +14,7 @@ st.set_page_config(page_title="Rock vs Mine Classifier", layout="wide")
 st.markdown("""
     <style>
         .main {
-            background-color: #f8fafc;
+            background-color: #ffffff;
         }
         .navbar {
             display: flex;
