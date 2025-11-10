@@ -10,50 +10,54 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
+from streamlit_extras.metric_cards import style_metric_cards
+from streamlit_extras.stylable_container import stylable_container
 
 # ----------------- PAGE CONFIG -----------------
 st.set_page_config(page_title="SONAR: Rock vs Mine", layout="wide")
-st.markdown(
-    """
-    <style>
-    body { background-color: white; color: #1a1a1a; }
-    .navbar {
-        display: flex; justify-content: center; gap: 2rem; 
-        padding: 1rem; background-color: #007BFF; border-radius: 0 0 10px 10px;
-    }
-    .nav-item {
-        color: white; text-decoration: none; font-size: 18px; font-weight: 500;
-        transition: all 0.3s ease-in-out;
-    }
-    .nav-item:hover { text-decoration: underline; color: #dce9ff; }
-    .active { text-decoration: underline; font-weight: 600; }
-    .fade {
-        animation: fadeEffect 0.5s; 
-    }
-    @keyframes fadeEffect {
-        from {opacity: 0;} to {opacity: 1;}
-    }
-    footer {
-        text-align: center; padding: 1rem; margin-top: 2rem; 
-        color: #555; border-top: 1px solid #eee;
-    }
-    </style>
-    """, unsafe_allow_html=True
-)
+
+# ----------------- CUSTOM CSS -----------------
+st.markdown("""
+<style>
+body { background-color: white; color: #1a1a1a; }
+.navbar {
+    display: flex; justify-content: center; align-items: center; gap: 2.5rem;
+    background-color: #007BFF; padding: 1rem 0; border-radius: 0 0 12px 12px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+}
+.nav-btn {
+    background: none; color: white; border: none; font-size: 17px; font-weight: 600;
+    cursor: pointer; transition: all 0.3s ease-in-out;
+}
+.nav-btn:hover { color: #dce9ff; transform: translateY(-2px); }
+.nav-active { text-decoration: underline; }
+.fade { animation: fadeEffect 0.4s; }
+@keyframes fadeEffect { from {opacity: 0;} to {opacity: 1;} }
+footer {
+    text-align: center; padding: 1rem; margin-top: 2rem; 
+    color: #555; border-top: 1px solid #eee;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ----------------- NAVBAR -----------------
 selected_tab = st.session_state.get("selected_tab", "Home")
 
-col1, col2, col3 = st.columns([1, 1, 1])
-with col1:
-    if st.button("🏠 Home"):
-        selected_tab = "Home"
-with col2:
-    if st.button("📊 Analysis"):
-        selected_tab = "Analysis"
-with col3:
-    if st.button("⚙️ Settings"):
-        selected_tab = "Settings"
+with stylable_container(key="navbar", css_styles="""
+    { border: none; border-radius: 0; }
+"""):
+    st.markdown('<div class="navbar">', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col1:
+        if st.button("🏠 Home", key="home_btn"):
+            selected_tab = "Home"
+    with col2:
+        if st.button("📊 Analysis", key="analysis_btn"):
+            selected_tab = "Analysis"
+    with col3:
+        if st.button("⚙️ Settings", key="settings_btn"):
+            selected_tab = "Settings"
+    st.markdown('</div>', unsafe_allow_html=True)
 
 st.session_state.selected_tab = selected_tab
 
@@ -80,10 +84,6 @@ def train_model():
 
     y_pred = model.predict(X_test)
     acc = accuracy_score(y_test, y_pred)
-
-    joblib.dump(model, "sonar_model.pkl")
-    joblib.dump(scaler, "scaler.pkl")
-    joblib.dump(le, "label_encoder.pkl")
 
     return model, scaler, le, acc, df
 
@@ -131,7 +131,7 @@ if selected_tab == "Home":
                 pred = model.predict(scaled)
                 label = le.inverse_transform(pred)[0]
                 st.success(f"✅ Prediction: **{label}**")
-            except Exception as e:
+            except:
                 st.error("Invalid input. Please check formatting.")
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -151,6 +151,7 @@ elif selected_tab == "Analysis":
     st.pyplot(fig)
 
     st.metric("Model Accuracy", f"{acc*100:.2f}%")
+    style_metric_cards(background_color="#f5f8ff", border_left_color="#007BFF", border_radius_px=10)
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ----------------- SETTINGS TAB -----------------
@@ -164,13 +165,13 @@ elif selected_tab == "Settings":
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ----------------- FOOTER -----------------
-st.markdown(
-    """
-    <footer>
+with stylable_container(key="footer", css_styles="""
+    {background-color: #007BFF; padding: 1rem; border-radius: 10px 10px 0 0; text-align: center;}
+"""):
+    st.markdown("""
+    <footer style="color: white;">
     Developed by <b>Ankur Dome</b> 💻 |
-    <a href="https://github.com/ankurdome" target="_blank">GitHub</a> |
-    <a href="https://linkedin.com/in/ankurdome" target="_blank">LinkedIn</a>
+    <a href="https://github.com/ankurdome" target="_blank" style="color:white;">GitHub</a> |
+    <a href="https://linkedin.com/in/ankurdome" target="_blank" style="color:white;">LinkedIn</a>
     </footer>
-    """,
-    unsafe_allow_html=True
-)
+    """, unsafe_allow_html=True)
