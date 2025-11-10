@@ -240,13 +240,7 @@ def page_home():
     st.subheader("Single sample prediction")
     st.write("Paste 60 comma-separated numeric values (0..1). Example sample available in quick-fill.")
     sample_input = st.text_area("Single sample (60 values)", height=120, key="single_sample_input")
-    c1, c2 = st.columns([1,1])
-    with c1:
-        if st.button("Use example sample"):
-            
-    with c2:
-        if st.button("Clear"):
-            st.session_state.single_sample_input = ""
+    
 
     if st.button("Predict single sample"):
         txt = st.session_state.get("single_sample_input", "")
