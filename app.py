@@ -1,63 +1,113 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import accuracy_score
 
-st.title("🎵 Sonar Rock vs Mine Prediction using KNN")
+st.set_page_config(page_title="Sonar Rock vs Mine Classifier", page_icon="🎵", layout="wide")
+st.title("🎵 Sonar Rock vs Mine Classifier")
 
-# Load dataset
-@st.cache_data
-def load_data():
+# ---- Upload file ----
+uploaded_file = st.file_uploader("📂 Upload your CSV file", type=["csv"])
+
+# ---- Function to train model (used if unlabeled data) ----
+@st.cache_resource
+def train_knn_model():
     data = pd.read_csv("sonarall-data.csv", header=None)
     X = data.iloc[:, :-1]
     y = data.iloc[:, -1]
+
     le = LabelEncoder()
     y = le.fit_transform(y)
-    return X, y, le
 
-X, y, le = load_data()
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
 
-# Standardize features
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.3, random_state=42)
 
-# Split data
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.3, random_state=42)
+    param_grid = {'n_neighbors': np.arange(1, 20)}
+    grid = GridSearchCV(KNeighborsClassifier(), param_grid, cv=5)
+    grid.fit(X_train, y_train)
+    best_k = grid.best_params_['n_neighbors']
 
-# Fine-tune KNN using GridSearchCV
-param_grid = {'n_neighbors': np.arange(1, 20)}
-grid = GridSearchCV(KNeighborsClassifier(), param_grid, cv=5)
-grid.fit(X_train, y_train)
-best_k = grid.best_params_['n_neighbors']
+    model = KNeighborsClassifier(n_neighbors=best_k)
+    model.fit(X_train, y_train)
 
-# Train final model
-knn = KNeighborsClassifier(n_neighbors=best_k)
-knn.fit(X_train, y_train)
+    return model, scaler, le, best_k
 
-# Display performance
-y_pred = knn.predict(X_test)
-acc = accuracy_score(y_test, y_pred)
-st.write(f"✅ **Model trained successfully!** (Best k = {best_k}, Accuracy = {acc:.2f})")
+# ---- Visualization helper ----
+def plot_label_distribution(labels, title):
+    label_counts = pd.Series(labels).value_counts().sort_index()
+    labels_display = label_counts.index.map({'R': 'Rock', 'M': 'Mine'}).tolist() if 'R' in label_counts.index else label_counts.index.tolist()
 
-# User input section
-st.subheader("🔢 Enter Sonar Readings (60 features)")
-st.caption("Each value should be between 0 and 1")
+    col1, col2 = st.columns(2)
 
-# User inputs
-input_values = []
-cols = st.columns(3)
-for i in range(60):
-    with cols[i % 3]:
-        val = st.number_input(f"Feature {i+1}", min_value=0.0, max_value=1.0, step=0.01, key=f"f{i}")
-        input_values.append(val)
+    with col1:
+        st.write("### 📊 Bar Chart")
+        fig, ax = plt.subplots()
+        sns.barplot(x=labels_display, y=label_counts.values, palette="coolwarm", ax=ax)
+        ax.set_xlabel("Label")
+        ax.set_ylabel("Count")
+        ax.set_title(title)
+        st.pyplot(fig)
 
-# Predict button
-if st.button("🔍 Predict"):
-    input_array = np.array(input_values).reshape(1, -1)
-    input_scaled = scaler.transform(input_array)
-    prediction = knn.predict(input_scaled)[0]
-    label = "Rock" if prediction == 1 else "Mine"
-    st.success(f"🎯 The object is predicted to be: **{label}**")
+    with col2:
+        st.write("### 🥧 Pie Chart")
+        fig2, ax2 = plt.subplots()
+        ax2.pie(label_counts.values, labels=labels_display, autopct="%1.1f%%", colors=sns.color_palette("coolwarm", len(label_counts)))
+        ax2.set_title(title)
+        st.pyplot(fig2)
+
+# ---- Main logic ----
+if uploaded_file is not None:
+    data = pd.read_csv(uploaded_file, header=None)
+    st.subheader("📋 Dataset Preview")
+    st.dataframe(data.head())
+
+    # Case 1: Labeled dataset
+    if data.shape[1] == 61:
+        st.success("✅ Labeled dataset detected (contains R/M column).")
+
+        labels = data.iloc[:, -1]
+        rock_count = (labels == 'R').sum()
+        mine_count = (labels == 'M').sum()
+
+        st.write(f"**Total Samples:** {len(labels)}")
+        st.write(f"🪨 Rocks: {rock_count}")
+        st.write(f"💣 Mines: {mine_count}")
+
+        plot_label_distribution(labels, "Actual Label Distribution")
+
+    # Case 2: Unlabeled dataset
+    elif data.shape[1] == 60:
+        st.warning("⚙️ Unlabeled dataset detected — predicting Rock/Mine using trained KNN model...")
+
+        with st.spinner("Training model and predicting..."):
+            model, scaler, le, best_k = train_knn_model()
+            input_scaled = scaler.transform(data)
+            predictions = model.predict(input_scaled)
+            predicted_labels = le.inverse_transform(predictions)
+
+        rock_count = np.sum(predicted_labels == 'R')
+        mine_count = np.sum(predicted_labels == 'M')
+
+        st.write(f"✅ **Prediction completed! (Best k = {best_k})**")
+        st.write(f"🪨 Predicted Rocks: {rock_count}")
+        st.write(f"💣 Predicted Mines: {mine_count}")
+
+        plot_label_distribution(predicted_labels, "Predicted Label Distribution")
+
+        st.subheader("🔹 Predicted Labels Preview")
+        pred_df = pd.DataFrame({
+            "Sample No.": np.arange(1, len(predicted_labels) + 1),
+            "Predicted Label": np.where(predicted_labels == 'R', 'Rock', 'Mine')
+        })
+        st.dataframe(pred_df.head(20))
+
+    else:
+        st.error("❌ Invalid file format. Expected 60 or 61 columns.")
+else:
+    st.info("👆 Please upload a CSV file to begin.")
