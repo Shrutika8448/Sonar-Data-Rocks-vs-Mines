@@ -286,7 +286,7 @@ def page_analysis():
             means = feat_df.groupby("label").mean().iloc[:, :6].T
             st.dataframe(means)
             # PCA plot
-            plot_pca_2d(feat_df.iloc[:, :].values[:, :60] if feat_df.shape[1]>=61 else feat_df.iloc[:, :-1].values, labels, "PCA (uploaded)")
+            
         else:
             st.info("Unlabeled dataset: predictions available only if a trained model exists.")
             if model_obj is None:
@@ -301,7 +301,7 @@ def page_analysis():
                 labs = le.inverse_transform(preds)
                 st.write(f"Predicted — Total: {len(labs)} — Rocks: {(labs=='R').sum()} — Mines: {(labs=='M').sum()}")
                 plot_bar_pie(labs, "Predicted distribution (uploaded)")
-                plot_pca_2d(X, labs, "PCA of uploaded (predicted labels)")
+                
 
     # show model performance if available
     st.divider()
