@@ -1,62 +1,72 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
-import os
-import time
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import accuracy_score, confusion_matrix
+import pickle
 import matplotlib.pyplot as plt
-import seaborn as sns
-from streamlit_extras.metric_cards import style_metric_cards
-from streamlit_extras.stylable_container import stylable_container
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
 
-# ----------------- PAGE CONFIG -----------------
-st.set_page_config(page_title="SONAR: Rock vs Mine", layout="wide")
+# --------------------------------------------------
+# PAGE CONFIG
+# --------------------------------------------------
+st.set_page_config(page_title="SONAR: Rock vs Mine", page_icon="🌊", layout="wide")
 
-# ----------------- CUSTOM CSS -----------------
+# Initialize session state
+if "selected_tab" not in st.session_state:
+    st.session_state.selected_tab = "Home"
+
+# --------------------------------------------------
+# TRAIN / LOAD MODEL
+# --------------------------------------------------
+@st.cache_data
+def load_data():
+    try:
+        df = pd.read_csv("https://raw.githubusercontent.com/ankurdome/Sonar-Data-Rocks-vs-Mines/main/sonar.csv", header=None)
+    except:
+        st.warning("Online dataset unavailable. Loading local fallback...")
+        df = pd.read_csv("sonar.csv", header=None)
+    return df
+
+@st.cache_resource
+def train_model():
+    df = load_data()
+    X = df.iloc[:, :-1]
+    y = df.iloc[:, -1]
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    model = LogisticRegression(max_iter=1000)
+    model.fit(X_scaled, y)
+
+    acc = model.score(X_scaled, y)
+    return model, scaler, acc, df
+
+model, scaler, acc, df = train_model()
+
+# --------------------------------------------------
+# CUSTOM CSS
+# --------------------------------------------------
 st.markdown("""
 <style>
-body { background-color: white; color: #1a1a1a; }
-.navbar {
-    display: flex; justify-content: center; align-items: center; gap: 2.5rem;
-    background-color: #007BFF; padding: 1rem 0; border-radius: 0 0 12px 12px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+body {
+  background-color: #f9f9f9;
+  font-family: 'Inter', sans-serif;
 }
-.nav-btn {
-    background: none; color: white; border: none; font-size: 17px; font-weight: 600;
-    cursor: pointer; transition: all 0.3s ease-in-out;
-}
-.nav-btn:hover { color: #dce9ff; transform: translateY(-2px); }
-.nav-active { text-decoration: underline; }
-.fade { animation: fadeEffect 0.4s; }
-@keyframes fadeEffect { from {opacity: 0;} to {opacity: 1;} }
-footer {
-    text-align: center; padding: 1rem; margin-top: 2rem; 
-    color: #555; border-top: 1px solid #eee;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ----------------- MODERN NAVBAR -----------------
-st.markdown("""
-<style>
 .navbar {
   display: flex;
   justify-content: center;
   align-items: center;
   background-color: #ffffff;
   border-bottom: 3px solid #007BFF;
-  padding: 0.8rem 0;
-  gap: 3rem;
-  font-family: 'Inter', sans-serif;
+  padding: 1rem 0;
+  gap: 4rem;
+  font-weight: 600;
+  font-size: 17px;
 }
 .nav-item {
   color: #333;
-  font-weight: 600;
-  font-size: 17px;
   cursor: pointer;
   position: relative;
   transition: color 0.3s ease-in-out;
@@ -84,137 +94,124 @@ st.markdown("""
 .nav-active::after {
   width: 100%;
 }
+.footer {
+  text-align: center;
+  margin-top: 3rem;
+  padding: 1rem;
+  color: #555;
+  font-size: 15px;
+  border-top: 1px solid #ddd;
+}
+.fade {
+  animation: fadeIn 0.5s ease-in;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 </style>
 """, unsafe_allow_html=True)
 
-col1, col2, col3 = st.columns([1, 1, 1])
+# --------------------------------------------------
+# NAVBAR
+# --------------------------------------------------
 st.markdown('<div class="navbar">', unsafe_allow_html=True)
 
-col1, col2, col3 = st.columns([1, 1, 1])
-with col1:
-    if st.button("🏠 Home", key="home_btn", help="Home"):
-        st.session_state.selected_tab = "Home"
-with col2:
-    if st.button("📊 Analysis", key="analysis_btn", help="Analysis"):
-        st.session_state.selected_tab = "Analysis"
-with col3:
-    if st.button("⚙️ Settings", key="settings_btn", help="Settings"):
-        st.session_state.selected_tab = "Settings"
+cols = st.columns([1, 1, 1])
+tabs = ["Home", "Analysis", "Settings"]
+icons = ["🏠", "📊", "⚙️"]
+
+for i, tab in enumerate(tabs):
+    if cols[i].button(f"{icons[i]} {tab}"):
+        st.session_state.selected_tab = tab
 
 st.markdown('</div>', unsafe_allow_html=True)
 
+selected_tab = st.session_state.selected_tab
 
-# ----------------- MODEL TRAINING -----------------
-@st.cache_data
-def train_model():
-    try:
-        df = pd.read_csv("https://raw.githubusercontent.com/ankurdome/sonar-dataset/main/sonar.csv", header=None)
-    except:
-        st.warning("Online dataset unavailable. Loading local fallback...")
-        df = pd.read_csv("sonar.csv", header=None)
-
-    X = df.iloc[:, :-1]
-    y = df.iloc[:, -1]
-    le = LabelEncoder()
-    y = le.fit_transform(y)
-
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
-    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
-    model = KNeighborsClassifier(n_neighbors=5, weights='distance')
-    model.fit(X_train, y_train)
-
-    y_pred = model.predict(X_test)
-    acc = accuracy_score(y_test, y_pred)
-
-    return model, scaler, le, acc, df
-
-model, scaler, le, acc, df = train_model()
-
-# ----------------- HOME TAB -----------------
+# --------------------------------------------------
+# PAGE: HOME
+# --------------------------------------------------
 if selected_tab == "Home":
-    st.markdown("<div class='fade'>", unsafe_allow_html=True)
-    st.title("🪨 SONAR: Rock vs Mine")
-    st.write("Predict whether the sonar return indicates a **Rock** or a **Mine** based on acoustic features.")
-    
+    st.markdown('<div class="fade">', unsafe_allow_html=True)
+    st.title("🌊 SONAR: Rock vs Mine")
+    st.write("Upload a dataset or single sample to classify between **Rock** and **Mine** signals using a logistic regression model.")
+
     col1, col2 = st.columns(2)
     with col1:
-        if os.path.exists("rock.jpg"):
-            st.image("rock.jpg", caption="Rock", use_container_width=True)
+        st.image("https://raw.githubusercontent.com/ankurdome/Sonar-Data-Rocks-vs-Mines/main/rock.jpg", caption="Rock", use_container_width=True)
     with col2:
-        if os.path.exists("mine.jpg"):
-            st.image("mine.jpg", caption="Mine", use_container_width=True)
-    
-    st.subheader("🔹 Upload Dataset or Test Single Sample")
-    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-    
+        st.image("https://raw.githubusercontent.com/ankurdome/Sonar-Data-Rocks-vs-Mines/main/mine.jpg", caption="Mine", use_container_width=True)
+
+    st.subheader("🔹 Upload Dataset")
+    uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
+
     if uploaded_file:
         data = pd.read_csv(uploaded_file, header=None)
-        if data.shape[1] == 61:
-            st.success("✅ Dataset already labeled.")
-            label_counts = data.iloc[:, -1].value_counts()
-            st.bar_chart(label_counts)
-            st.write(label_counts)
-        else:
-            scaled = scaler.transform(data)
-            preds = model.predict(scaled)
-            decoded = le.inverse_transform(preds)
-            data["Predicted Label"] = decoded
-            st.dataframe(data)
-            st.bar_chart(pd.Series(decoded).value_counts())
-    else:
-        st.write("Or enter a single CSV row below:")
-        example = "0.0200, 0.0371, 0.0428, 0.0207, 0.0954, 0.0986, 0.1539, 0.1601, 0.3109, 0.2111, 0.1609, 0.1582, 0.2238, 0.0645, 0.0660, 0.2273, 0.3100, 0.2999, 0.5078, 0.4797, 0.5783, 0.5071, 0.4328, 0.5550, 0.6711, 0.6415, 0.7104, 0.8080, 0.6791, 0.3857, 0.1307, 0.2604, 0.5121, 0.7547, 0.8537, 0.8507, 0.6692, 0.6097, 0.4943, 0.2744, 0.0510, 0.2834, 0.2825, 0.4256, 0.2641, 0.1386, 0.1051, 0.1343, 0.0383, 0.0324, 0.0232, 0.0027, 0.0065, 0.0159, 0.0072, 0.0167, 0.0180, 0.0084, 0.0090, 0.0032"
-        sample = st.text_area("Enter 60 comma-separated values:", example)
-        if st.button("Predict"):
-            try:
-                values = np.array([list(map(float, sample.split(",")))])
-                scaled = scaler.transform(values)
-                pred = model.predict(scaled)
-                label = le.inverse_transform(pred)[0]
-                st.success(f"✅ Prediction: **{label}**")
-            except:
-                st.error("Invalid input. Please check formatting.")
-    st.markdown("</div>", unsafe_allow_html=True)
+        st.write("Uploaded Data Preview:")
+        st.dataframe(data.head())
 
-# ----------------- ANALYSIS TAB -----------------
+        if data.shape[1] == 61:  # labeled
+            counts = data[60].value_counts()
+            st.write("### Class Distribution")
+            st.bar_chart(counts)
+        else:  # unlabeled
+            preds = model.predict(scaler.transform(data))
+            counts = pd.Series(preds).value_counts()
+            st.write("### Predicted Class Distribution")
+            st.bar_chart(counts)
+            st.write("### Predictions per Sample")
+            st.write(preds)
+
+    st.subheader("🔹 Single Sample Input")
+    example = "0.0200,0.0371,0.0428,0.0207,0.0954,0.0986,0.1539,0.1601,0.3109,0.2111,0.1609,0.1582,0.2238,0.0645,0.0660,0.2273,0.3100,0.2999,0.5078,0.4797,0.5783,0.5071,0.4328,0.5550,0.6711,0.6415,0.7104,0.8080,0.6791,0.3857,0.1307,0.2604,0.5121,0.7547,0.8537,0.8507,0.6692,0.6097,0.4943,0.2744,0.0510,0.2834,0.2825,0.4256,0.2641,0.1386,0.1051,0.1343,0.0383,0.0324,0.0232,0.0027,0.0065,0.0159,0.0072,0.0167,0.0180,0.0084,0.0090,0.0032"
+    sample_input = st.text_input("Enter comma-separated sample data (60 values):", example)
+
+    if st.button("Predict Sample"):
+        try:
+            arr = np.array([float(x) for x in sample_input.split(",")]).reshape(1, -1)
+            pred = model.predict(scaler.transform(arr))[0]
+            st.success(f"### 🧭 Model Prediction: **{pred.upper()}**")
+        except Exception as e:
+            st.error("Invalid input. Please enter 60 comma-separated numeric values.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# --------------------------------------------------
+# PAGE: ANALYSIS
+# --------------------------------------------------
 elif selected_tab == "Analysis":
-    st.markdown("<div class='fade'>", unsafe_allow_html=True)
-    st.title("📊 Model Analysis")
+    st.markdown('<div class="fade">', unsafe_allow_html=True)
+    st.title("📊 Analysis Dashboard")
 
-    y = le.fit_transform(df.iloc[:, -1])
-    X = scaler.transform(df.iloc[:, :-1])
-    preds = model.predict(X)
+    counts = df[60].value_counts()
+    st.subheader("Dataset Distribution (Rock vs Mine)")
+    st.bar_chart(counts)
 
-    cm = confusion_matrix(y, preds)
-    fig, ax = plt.subplots()
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=le.classes_, yticklabels=le.classes_, ax=ax)
-    plt.xlabel("Predicted"); plt.ylabel("Actual")
-    st.pyplot(fig)
+    st.subheader("Model Accuracy")
+    st.metric(label="Training Accuracy", value=f"{acc*100:.2f}%")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    st.metric("Model Accuracy", f"{acc*100:.2f}%")
-    style_metric_cards(background_color="#f5f8ff", border_left_color="#007BFF", border_radius_px=10)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# ----------------- SETTINGS TAB -----------------
+# --------------------------------------------------
+# PAGE: SETTINGS
+# --------------------------------------------------
 elif selected_tab == "Settings":
-    st.markdown("<div class='fade'>", unsafe_allow_html=True)
+    st.markdown('<div class="fade">', unsafe_allow_html=True)
     st.title("⚙️ Settings & Environment")
-    st.write("**Python Environment:**")
-    st.code("Python 3.12 | scikit-learn | pandas | streamlit | numpy")
-    st.write("**Model Info:** K-Nearest Neighbors (KNN), distance-weighted, n_neighbors=5")
-    st.write(f"**Trained Accuracy:** {acc*100:.2f}%")
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.write("This section contains environment details and setup steps.")
+    st.code("""
+    pip install -r requirements.txt
+    streamlit run app.py
+    """)
+    st.write("Model: Logistic Regression")
+    st.write("Scaler: StandardScaler")
+    st.write("Dataset: sonar.csv (local / GitHub)")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# ----------------- FOOTER -----------------
-with stylable_container(key="footer", css_styles="""
-    {background-color: #007BFF; padding: 1rem; border-radius: 10px 10px 0 0; text-align: center;}
-"""):
-    st.markdown("""
-    <footer style="color: white;">
-    Developed by <b>Ankur Dome</b> 💻 |
-    <a href="https://github.com/ankurdome" target="_blank" style="color:white;">GitHub</a> |
-    <a href="https://linkedin.com/in/ankurdome" target="_blank" style="color:white;">LinkedIn</a>
-    </footer>
-    """, unsafe_allow_html=True)
+# --------------------------------------------------
+# FOOTER
+# --------------------------------------------------
+st.markdown("""
+<div class="footer">
+    <b>🌊 SONAR: Rock vs Mine</b> | Built with ❤️ using Streamlit
+</div>
+""", unsafe_allow_html=True)
