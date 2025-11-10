@@ -1,148 +1,176 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
+import joblib
+import os
+import time
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-from streamlit_extras.stylable_container import stylable_container
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# --- Page setup ---
+# ----------------- PAGE CONFIG -----------------
 st.set_page_config(page_title="SONAR: Rock vs Mine", layout="wide")
+st.markdown(
+    """
+    <style>
+    body { background-color: white; color: #1a1a1a; }
+    .navbar {
+        display: flex; justify-content: center; gap: 2rem; 
+        padding: 1rem; background-color: #007BFF; border-radius: 0 0 10px 10px;
+    }
+    .nav-item {
+        color: white; text-decoration: none; font-size: 18px; font-weight: 500;
+        transition: all 0.3s ease-in-out;
+    }
+    .nav-item:hover { text-decoration: underline; color: #dce9ff; }
+    .active { text-decoration: underline; font-weight: 600; }
+    .fade {
+        animation: fadeEffect 0.5s; 
+    }
+    @keyframes fadeEffect {
+        from {opacity: 0;} to {opacity: 1;}
+    }
+    footer {
+        text-align: center; padding: 1rem; margin-top: 2rem; 
+        color: #555; border-top: 1px solid #eee;
+    }
+    </style>
+    """, unsafe_allow_html=True
+)
 
-# --- Custom CSS ---
-st.markdown("""
-<style>
-body {
-    background-color: #f8faff;
-}
-.navbar {
-    display: flex;
-    justify-content: center;
-    background-color: #004080;
-    padding: 0.8rem 0;
-    border-radius: 0 0 12px 12px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-}
-.nav-item {
-    color: white;
-    padding: 0.5rem 1.5rem;
-    margin: 0 0.5rem;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.3s ease-in-out;
-}
-.nav-item:hover {
-    background-color: #0066cc;
-}
-.nav-active {
-    background-color: #0059b3;
-}
-.fade {
-    animation: fadeEffect 0.6s;
-}
-@keyframes fadeEffect {
-    from {opacity: 0;}
-    to {opacity: 1;}
-}
-footer {
-    text-align: center;
-    padding: 1rem;
-    background-color: #004080;
-    color: white;
-    border-radius: 12px 12px 0 0;
-    margin-top: 2rem;
-}
-</style>
-""", unsafe_allow_html=True)
+# ----------------- NAVBAR -----------------
+selected_tab = st.session_state.get("selected_tab", "Home")
 
-# --- Navbar logic ---
-if "active_tab" not in st.session_state:
-    st.session_state.active_tab = "Home"
+col1, col2, col3 = st.columns([1, 1, 1])
+with col1:
+    if st.button("🏠 Home"):
+        selected_tab = "Home"
+with col2:
+    if st.button("📊 Analysis"):
+        selected_tab = "Analysis"
+with col3:
+    if st.button("⚙️ Settings"):
+        selected_tab = "Settings"
 
-def set_tab(tab_name):
-    st.session_state.active_tab = tab_name
+st.session_state.selected_tab = selected_tab
 
-navbar_html = f"""
-<div class="navbar">
-    <div class="nav-item {'nav-active' if st.session_state.active_tab=='Home' else ''}" onclick="window.location.href='#Home'">Home</div>
-    <div class="nav-item {'nav-active' if st.session_state.active_tab=='Analysis' else ''}" onclick="window.location.href='#Analysis'">Analysis</div>
-    <div class="nav-item {'nav-active' if st.session_state.active_tab=='Settings' else ''}" onclick="window.location.href='#Settings'">Settings</div>
-</div>
-"""
-st.markdown(navbar_html, unsafe_allow_html=True)
-
-# --- Navbar JS (simulate switching tabs dynamically) ---
-st.markdown("""
-<script>
-const items = Array.from(document.querySelectorAll('.nav-item'));
-items.forEach(item => item.addEventListener('click', e => {
-    const text = e.target.innerText.trim();
-    window.parent.postMessage({isStreamlitMessage:true, type:"SET_TAB", tab:text}, "*");
-}));
-</script>
-""", unsafe_allow_html=True)
-
-# Handle JS message
-st.session_state.active_tab = st.experimental_get_query_params().get("tab", [st.session_state.active_tab])[0]
-
-# --- Load model and dataset ---
+# ----------------- MODEL TRAINING -----------------
 @st.cache_data
 def train_model():
-    df = pd.read_csv("https://raw.githubusercontent.com/Shrutika8448/Sonar-Data-Rocks-vs-Mines/main/sonar.csv", header=None)
+    try:
+        df = pd.read_csv("https://raw.githubusercontent.com/ankurdome/sonar-dataset/main/sonar.csv", header=None)
+    except:
+        st.warning("Online dataset unavailable. Loading local fallback...")
+        df = pd.read_csv("sonar.csv", header=None)
+
     X = df.iloc[:, :-1]
     y = df.iloc[:, -1]
+    le = LabelEncoder()
+    y = le.fit_transform(y)
 
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
+
     X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
-
-    model = LogisticRegression()
+    model = KNeighborsClassifier(n_neighbors=5, weights='distance')
     model.fit(X_train, y_train)
-    acc = accuracy_score(y_test, model.predict(X_test))
-    return model, scaler, acc
 
-model, scaler, acc = train_model()
+    y_pred = model.predict(X_test)
+    acc = accuracy_score(y_test, y_pred)
 
-# --- Main Content (Dynamic fade section) ---
-st.markdown('<div class="fade">', unsafe_allow_html=True)
+    joblib.dump(model, "sonar_model.pkl")
+    joblib.dump(scaler, "scaler.pkl")
+    joblib.dump(le, "label_encoder.pkl")
 
-if st.session_state.active_tab == "Home":
-    st.title("🛰️ SONAR: Rock vs Mine")
-    st.write("This project predicts whether a given sonar signal represents a **rock** or a **mine** using machine learning.")
+    return model, scaler, le, acc, df
+
+model, scaler, le, acc, df = train_model()
+
+# ----------------- HOME TAB -----------------
+if selected_tab == "Home":
+    st.markdown("<div class='fade'>", unsafe_allow_html=True)
+    st.title("🪨 SONAR: Rock vs Mine")
+    st.write("Predict whether the sonar return indicates a **Rock** or a **Mine** based on acoustic features.")
+    
     col1, col2 = st.columns(2)
-
     with col1:
-        st.image("https://raw.githubusercontent.com/Shrutika8448/Sonar-Data-Rocks-vs-Mines/main/rock.jpg", caption="Rock", use_container_width=True)
+        if os.path.exists("rock.jpg"):
+            st.image("rock.jpg", caption="Rock", use_container_width=True)
     with col2:
-        st.image("https://raw.githubusercontent.com/Shrutika8448/Sonar-Data-Rocks-vs-Mines/main/mine.jpg", caption="Mine", use_container_width=True)
+        if os.path.exists("mine.jpg"):
+            st.image("mine.jpg", caption="Mine", use_container_width=True)
+    
+    st.subheader("🔹 Upload Dataset or Test Single Sample")
+    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+    
+    if uploaded_file:
+        data = pd.read_csv(uploaded_file, header=None)
+        if data.shape[1] == 61:
+            st.success("✅ Dataset already labeled.")
+            label_counts = data.iloc[:, -1].value_counts()
+            st.bar_chart(label_counts)
+            st.write(label_counts)
+        else:
+            scaled = scaler.transform(data)
+            preds = model.predict(scaled)
+            decoded = le.inverse_transform(preds)
+            data["Predicted Label"] = decoded
+            st.dataframe(data)
+            st.bar_chart(pd.Series(decoded).value_counts())
+    else:
+        st.write("Or enter a single CSV row below:")
+        example = "0.0200, 0.0371, 0.0428, 0.0207, 0.0954, 0.0986, 0.1539, 0.1601, 0.3109, 0.2111, 0.1609, 0.1582, 0.2238, 0.0645, 0.0660, 0.2273, 0.3100, 0.2999, 0.5078, 0.4797, 0.5783, 0.5071, 0.4328, 0.5550, 0.6711, 0.6415, 0.7104, 0.8080, 0.6791, 0.3857, 0.1307, 0.2604, 0.5121, 0.7547, 0.8537, 0.8507, 0.6692, 0.6097, 0.4943, 0.2744, 0.0510, 0.2834, 0.2825, 0.4256, 0.2641, 0.1386, 0.1051, 0.1343, 0.0383, 0.0324, 0.0232, 0.0027, 0.0065, 0.0159, 0.0072, 0.0167, 0.0180, 0.0084, 0.0090, 0.0032"
+        sample = st.text_area("Enter 60 comma-separated values:", example)
+        if st.button("Predict"):
+            try:
+                values = np.array([list(map(float, sample.split(",")))])
+                scaled = scaler.transform(values)
+                pred = model.predict(scaled)
+                label = le.inverse_transform(pred)[0]
+                st.success(f"✅ Prediction: **{label}**")
+            except Exception as e:
+                st.error("Invalid input. Please check formatting.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.subheader("🔍 Upload Dataset or Single Sample")
-    uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+# ----------------- ANALYSIS TAB -----------------
+elif selected_tab == "Analysis":
+    st.markdown("<div class='fade'>", unsafe_allow_html=True)
+    st.title("📊 Model Analysis")
 
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
-        st.write("Uploaded Data Preview:", df.head())
+    y = le.fit_transform(df.iloc[:, -1])
+    X = scaler.transform(df.iloc[:, :-1])
+    preds = model.predict(X)
 
-    st.write(f"Model accuracy: **{acc*100:.2f}%**")
+    cm = confusion_matrix(y, preds)
+    fig, ax = plt.subplots()
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=le.classes_, yticklabels=le.classes_, ax=ax)
+    plt.xlabel("Predicted"); plt.ylabel("Actual")
+    st.pyplot(fig)
 
-elif st.session_state.active_tab == "Analysis":
-    st.title("📊 Data Analysis & Insights")
-    st.write("Here you can visualize various patterns from the sonar dataset.")
-    st.line_chart(np.random.randn(20, 2))
+    st.metric("Model Accuracy", f"{acc*100:.2f}%")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-elif st.session_state.active_tab == "Settings":
-    st.title("⚙️ Environment & Settings")
-    st.write("Model: Logistic Regression")
-    st.write("Scaler: StandardScaler")
-    st.write("Dataset Source: [GitHub Repo](https://github.com/Shrutika8448/Sonar-Data-Rocks-vs-Mines)")
+# ----------------- SETTINGS TAB -----------------
+elif selected_tab == "Settings":
+    st.markdown("<div class='fade'>", unsafe_allow_html=True)
+    st.title("⚙️ Settings & Environment")
+    st.write("**Python Environment:**")
+    st.code("Python 3.12 | scikit-learn | pandas | streamlit | numpy")
+    st.write("**Model Info:** K-Nearest Neighbors (KNN), distance-weighted, n_neighbors=5")
+    st.write(f"**Trained Accuracy:** {acc*100:.2f}%")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-st.markdown('</div>', unsafe_allow_html=True)
-
-# --- Footer ---
-st.markdown("""
-<footer>
-    Made with ❤️ using Streamlit | © 2025 SONAR Rock vs Mine
-</footer>
-""", unsafe_allow_html=True)
+# ----------------- FOOTER -----------------
+st.markdown(
+    """
+    <footer>
+    Developed by <b>Ankur Dome</b> 💻 |
+    <a href="https://github.com/ankurdome" target="_blank">GitHub</a> |
+    <a href="https://linkedin.com/in/ankurdome" target="_blank">LinkedIn</a>
+    </footer>
+    """,
+    unsafe_allow_html=True
+)
