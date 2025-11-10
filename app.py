@@ -21,10 +21,6 @@ if "selected_tab" not in st.session_state:
 # --------------------------------------------------
 @st.cache_data
 def load_data():
-    try:
-        df = pd.read_csv("sonar.csv", header=None)
-    except:
-        st.warning("Online dataset unavailable. Loading local fallback...")
         df = pd.read_csv("sonar.csv", header=None)
     return df
 
