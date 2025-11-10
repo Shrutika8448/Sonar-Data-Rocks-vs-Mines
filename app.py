@@ -1,102 +1,63 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
-from sklearn.decomposition import PCA
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.metrics import accuracy_score
 
-st.title("🔍 Sonar Rock vs Mine Prediction App")
+st.title("🎵 Sonar Rock vs Mine Prediction using KNN")
 
-# File uploader
-uploaded_file = st.file_uploader("Upload your dataset (CSV file)", type=["csv"])
-
-if uploaded_file is not None:
-    data = pd.read_csv(uploaded_file, header=None)
-    st.write("### Dataset Preview")
-    st.write(data.head())
-    st.write("**Shape of dataset:**", data.shape)
-
-    # Split data
+# Load dataset
+@st.cache_data
+def load_data():
+    data = pd.read_csv("sonarall-data.csv", header=None)
     X = data.iloc[:, :-1]
     y = data.iloc[:, -1]
     le = LabelEncoder()
     y = le.fit_transform(y)
+    return X, y, le
 
-    # Train-test split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+X, y, le = load_data()
 
-    st.write("### Model Training and Comparison")
+# Standardize features
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
-    # ---- KNN ----
-    neighbors = np.arange(1, 14)
-    train_accuracy = np.empty(len(neighbors))
-    test_accuracy = np.empty(len(neighbors))
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.3, random_state=42)
 
-    for i, k in enumerate(neighbors):
-        knn = KNeighborsClassifier(n_neighbors=k)
-        knn.fit(X_train, y_train)
-        train_accuracy[i] = knn.score(X_train, y_train)
-        test_accuracy[i] = knn.score(X_test, y_test)
+# Fine-tune KNN using GridSearchCV
+param_grid = {'n_neighbors': np.arange(1, 20)}
+grid = GridSearchCV(KNeighborsClassifier(), param_grid, cv=5)
+grid.fit(X_train, y_train)
+best_k = grid.best_params_['n_neighbors']
 
-    fig, ax = plt.subplots()
-    ax.plot(neighbors, test_accuracy, label='Testing Accuracy')
-    ax.plot(neighbors, train_accuracy, label='Training Accuracy')
-    ax.set_xlabel('Number of Neighbors')
-    ax.set_ylabel('Accuracy')
-    ax.set_title('k-NN Varying Number of Neighbors')
-    ax.legend()
-    st.pyplot(fig)
+# Train final model
+knn = KNeighborsClassifier(n_neighbors=best_k)
+knn.fit(X_train, y_train)
 
-    knn = KNeighborsClassifier(n_neighbors=2)
-    knn.fit(X_train, y_train)
-    y_pred_knn = knn.predict(X_test)
+# Display performance
+y_pred = knn.predict(X_test)
+acc = accuracy_score(y_test, y_pred)
+st.write(f"✅ **Model trained successfully!** (Best k = {best_k}, Accuracy = {acc:.2f})")
 
-    # ---- Logistic Regression ----
-    log_model = LogisticRegression(max_iter=1000)
-    log_model.fit(X_train, y_train)
-    y_pred_logistic = log_model.predict(X_test)
+# User input section
+st.subheader("🔢 Enter Sonar Readings (60 features)")
+st.caption("Each value should be between 0 and 1")
 
-    # ---- PCA + Logistic Regression ----
-    pca = PCA(n_components=10)
-    X_train_pca = pca.fit_transform(X_train)
-    X_test_pca = pca.transform(X_test)
-    model_pca = LogisticRegression(max_iter=1000)
-    model_pca.fit(X_train_pca, y_train)
-    y_pred_pca = model_pca.predict(X_test_pca)
+# User inputs
+input_values = []
+cols = st.columns(3)
+for i in range(60):
+    with cols[i % 3]:
+        val = st.number_input(f"Feature {i+1}", min_value=0.0, max_value=1.0, step=0.01, key=f"f{i}")
+        input_values.append(val)
 
-    # ---- SVM ----
-    svm = SVC(kernel='linear')
-    svm.fit(X_train, y_train)
-    y_pred_svm = svm.predict(X_test)
-
-    # ---- Display Results ----
-    st.subheader("Model Performance Metrics")
-    st.write("**kNN Accuracy:**", accuracy_score(y_test, y_pred_knn))
-    st.write("**Logistic Regression Accuracy:**", accuracy_score(y_test, y_pred_logistic))
-    st.write("**PCA + Logistic Regression Accuracy:**", accuracy_score(y_test, y_pred_pca))
-    st.write("**SVM Accuracy:**", accuracy_score(y_test, y_pred_svm))
-
-    # Confusion matrices
-    st.write("### Confusion Matrices")
-
-    models = {
-        "kNN": y_pred_knn,
-        "Logistic Regression": y_pred_logistic,
-        "PCA + Logistic Regression": y_pred_pca,
-        "SVM": y_pred_svm
-    }
-
-    for name, preds in models.items():
-        cm = confusion_matrix(y_test, preds)
-        fig, ax = plt.subplots()
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", ax=ax)
-        ax.set_title(f"{name} Confusion Matrix")
-        st.pyplot(fig)
-else:
-    st.info("👆 Please upload a CSV file to begin.")
+# Predict button
+if st.button("🔍 Predict"):
+    input_array = np.array(input_values).reshape(1, -1)
+    input_scaled = scaler.transform(input_array)
+    prediction = knn.predict(input_scaled)[0]
+    label = "Rock" if prediction == 1 else "Mine"
+    st.success(f"🎯 The object is predicted to be: **{label}**")
