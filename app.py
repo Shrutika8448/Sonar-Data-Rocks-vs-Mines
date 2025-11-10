@@ -102,3 +102,4 @@ elif mode == "Single Sample Input":
                 st.success(f"🪨 The sample is predicted as: **{'Rock' if label=='R' else 'Mine'}**")
         except Exception as e:
             st.error(f"Error: {e}")
+
