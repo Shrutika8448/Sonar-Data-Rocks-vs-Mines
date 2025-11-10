@@ -78,7 +78,7 @@ with nav_cols[3]:
 @st.cache_data
 def load_default_training():
     # try local file if exists
-    local = "sonarall-data.csv"
+    local = "sonar.csv"
     if os.path.exists(local):
         return pd.read_csv(local, header=None)
     return None
@@ -155,7 +155,7 @@ else:
     if default_df is not None:
         train_df = default_df
         use_default = True
-        st.sidebar.info("Using local sonarall-data.csv as training dataset (found in app folder).")
+        st.sidebar.info("Using local sonar.csv as training dataset (found in app folder).")
     else:
         st.sidebar.warning("No training file uploaded. Upload to enable prediction on unlabeled data & single sample.")
 
@@ -193,7 +193,7 @@ def page_home():
         2. Use **Upload Dataset** to analyze a full CSV (labeled or unlabeled).  
         3. Use **Single Sample** to paste one sample (60 comma-separated values) and predict.  
         """)
-        st.markdown("**Tip:** If you include a `sonarall-data.csv` file in the app folder, the app will auto-use it as default training data.")
+        st.markdown("**Tip:** If you include a `sonar.csv` file in the app folder, the app will auto-use it as default training data.")
     with cols[1]:
         # reliable Unsplash images (add parameters to ensure load)
         st.image("rock.jpg",
