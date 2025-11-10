@@ -249,7 +249,7 @@ def page_home():
                        "0.1307,0.2604,0.5121,0.7547,0.8537,0.8507,0.6692,0.6097,0.4943,0.2744,"
                        "0.0510,0.2834,0.2825,0.4256,0.2641,0.1386,0.1051,0.1343,0.0383,0.0324,"
                        "0.0232,0.0027,0.0065,0.0159,0.0072,0.0167,0.0180,0.0084,0.0090,0.0032")
-          if "single_sample_input" not in st.session_state:
+        if "single_sample_input" not in st.session_state:
             st.session_state.single_sample_input = example
     with c2:
         if st.button("Clear"):
