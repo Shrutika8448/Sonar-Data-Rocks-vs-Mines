@@ -1,214 +1,148 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import pickle
-import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from streamlit_extras.stylable_container import stylable_container
 
-# --------------------------------------------------
-# PAGE CONFIG
-# --------------------------------------------------
-st.set_page_config(page_title="SONAR: Rock vs Mine", page_icon="🌊", layout="wide")
+# --- Page setup ---
+st.set_page_config(page_title="SONAR: Rock vs Mine", layout="wide")
 
-# Initialize session state
-if "selected_tab" not in st.session_state:
-    st.session_state.selected_tab = "Home"
+# --- Custom CSS ---
+st.markdown("""
+<style>
+body {
+    background-color: #f8faff;
+}
+.navbar {
+    display: flex;
+    justify-content: center;
+    background-color: #004080;
+    padding: 0.8rem 0;
+    border-radius: 0 0 12px 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+.nav-item {
+    color: white;
+    padding: 0.5rem 1.5rem;
+    margin: 0 0.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease-in-out;
+}
+.nav-item:hover {
+    background-color: #0066cc;
+}
+.nav-active {
+    background-color: #0059b3;
+}
+.fade {
+    animation: fadeEffect 0.6s;
+}
+@keyframes fadeEffect {
+    from {opacity: 0;}
+    to {opacity: 1;}
+}
+footer {
+    text-align: center;
+    padding: 1rem;
+    background-color: #004080;
+    color: white;
+    border-radius: 12px 12px 0 0;
+    margin-top: 2rem;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# --------------------------------------------------
-# TRAIN / LOAD MODEL
-# --------------------------------------------------
+# --- Navbar logic ---
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = "Home"
+
+def set_tab(tab_name):
+    st.session_state.active_tab = tab_name
+
+navbar_html = f"""
+<div class="navbar">
+    <div class="nav-item {'nav-active' if st.session_state.active_tab=='Home' else ''}" onclick="window.location.href='#Home'">Home</div>
+    <div class="nav-item {'nav-active' if st.session_state.active_tab=='Analysis' else ''}" onclick="window.location.href='#Analysis'">Analysis</div>
+    <div class="nav-item {'nav-active' if st.session_state.active_tab=='Settings' else ''}" onclick="window.location.href='#Settings'">Settings</div>
+</div>
+"""
+st.markdown(navbar_html, unsafe_allow_html=True)
+
+# --- Navbar JS (simulate switching tabs dynamically) ---
+st.markdown("""
+<script>
+const items = Array.from(document.querySelectorAll('.nav-item'));
+items.forEach(item => item.addEventListener('click', e => {
+    const text = e.target.innerText.trim();
+    window.parent.postMessage({isStreamlitMessage:true, type:"SET_TAB", tab:text}, "*");
+}));
+</script>
+""", unsafe_allow_html=True)
+
+# Handle JS message
+st.session_state.active_tab = st.experimental_get_query_params().get("tab", [st.session_state.active_tab])[0]
+
+# --- Load model and dataset ---
 @st.cache_data
-def load_data():
-    df = pd.read_csv("sonar.csv", header=None)
-    return df
-
-
-@st.cache_resource
 def train_model():
-    df = load_data()
+    df = pd.read_csv("https://raw.githubusercontent.com/Shrutika8448/Sonar-Data-Rocks-vs-Mines/main/sonar.csv", header=None)
     X = df.iloc[:, :-1]
     y = df.iloc[:, -1]
 
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
-    model = LogisticRegression(max_iter=1000)
-    model.fit(X_scaled, y)
+    model = LogisticRegression()
+    model.fit(X_train, y_train)
+    acc = accuracy_score(y_test, model.predict(X_test))
+    return model, scaler, acc
 
-    acc = model.score(X_scaled, y)
-    return model, scaler, acc, df
+model, scaler, acc = train_model()
 
-model, scaler, acc, df = train_model()
+# --- Main Content (Dynamic fade section) ---
+st.markdown('<div class="fade">', unsafe_allow_html=True)
 
-# --------------------------------------------------
-# CUSTOM CSS
-# --------------------------------------------------
-st.markdown("""
-<style>
-body {
-  background-color: #f9f9f9;
-  font-family: 'Inter', sans-serif;
-}
-.navbar {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background-color: #ffffff;
-  border-bottom: 3px solid #007BFF;
-  padding: 1rem 0;
-  gap: 4rem;
-  font-weight: 600;
-  font-size: 17px;
-}
-.nav-item {
-  color: #333;
-  cursor: pointer;
-  position: relative;
-  transition: color 0.3s ease-in-out;
-}
-.nav-item:hover {
-  color: #007BFF;
-}
-.nav-item::after {
-  content: '';
-  position: absolute;
-  width: 0%;
-  height: 3px;
-  left: 0;
-  bottom: -5px;
-  background-color: #007BFF;
-  transition: width 0.3s ease-in-out;
-  border-radius: 2px;
-}
-.nav-item:hover::after {
-  width: 100%;
-}
-.nav-active {
-  color: #007BFF;
-}
-.nav-active::after {
-  width: 100%;
-}
-.footer {
-  text-align: center;
-  margin-top: 3rem;
-  padding: 1rem;
-  color: #555;
-  font-size: 15px;
-  border-top: 1px solid #ddd;
-}
-.fade {
-  animation: fadeIn 0.5s ease-in;
-}
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-</style>
-""", unsafe_allow_html=True)
+if st.session_state.active_tab == "Home":
+    st.title("🛰️ SONAR: Rock vs Mine")
+    st.write("This project predicts whether a given sonar signal represents a **rock** or a **mine** using machine learning.")
+    col1, col2 = st.columns(2)
 
-# --------------------------------------------------
-# NAVBAR
-# --------------------------------------------------
-st.markdown('<div class="navbar">', unsafe_allow_html=True)
+    with col1:
+        st.image("https://raw.githubusercontent.com/Shrutika8448/Sonar-Data-Rocks-vs-Mines/main/rock.jpg", caption="Rock", use_container_width=True)
+    with col2:
+        st.image("https://raw.githubusercontent.com/Shrutika8448/Sonar-Data-Rocks-vs-Mines/main/mine.jpg", caption="Mine", use_container_width=True)
 
-cols = st.columns([1, 1, 1])
-tabs = ["Home", "Analysis", "Settings"]
-icons = ["🏠", "📊", "⚙️"]
+    st.subheader("🔍 Upload Dataset or Single Sample")
+    uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
-for i, tab in enumerate(tabs):
-    if cols[i].button(f"{icons[i]} {tab}"):
-        st.session_state.selected_tab = tab
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        st.write("Uploaded Data Preview:", df.head())
+
+    st.write(f"Model accuracy: **{acc*100:.2f}%**")
+
+elif st.session_state.active_tab == "Analysis":
+    st.title("📊 Data Analysis & Insights")
+    st.write("Here you can visualize various patterns from the sonar dataset.")
+    st.line_chart(np.random.randn(20, 2))
+
+elif st.session_state.active_tab == "Settings":
+    st.title("⚙️ Environment & Settings")
+    st.write("Model: Logistic Regression")
+    st.write("Scaler: StandardScaler")
+    st.write("Dataset Source: [GitHub Repo](https://github.com/Shrutika8448/Sonar-Data-Rocks-vs-Mines)")
 
 st.markdown('</div>', unsafe_allow_html=True)
 
-selected_tab = st.session_state.selected_tab
-
-# --------------------------------------------------
-# PAGE: HOME
-# --------------------------------------------------
-if selected_tab == "Home":
-    st.markdown('<div class="fade">', unsafe_allow_html=True)
-    st.title("🌊 SONAR: Rock vs Mine")
-    st.write("Upload a dataset or single sample to classify between **Rock** and **Mine** signals using a logistic regression model.")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.image("./rock.jpg", caption="Rock", use_container_width=True)
-    with col2:
-        st.image("./mine.jpg", caption="Mine", use_container_width=True)
-
-    st.subheader("🔹 Upload Dataset")
-    uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
-
-    if uploaded_file:
-        data = pd.read_csv(uploaded_file, header=None)
-        st.write("Uploaded Data Preview:")
-        st.dataframe(data.head())
-
-        if data.shape[1] == 61:  # labeled
-            counts = data[60].value_counts()
-            st.write("### Class Distribution")
-            st.bar_chart(counts)
-        else:  # unlabeled
-            preds = model.predict(scaler.transform(data))
-            counts = pd.Series(preds).value_counts()
-            st.write("### Predicted Class Distribution")
-            st.bar_chart(counts)
-            st.write("### Predictions per Sample")
-            st.write(preds)
-
-    st.subheader("🔹 Single Sample Input")
-    example = "0.0200,0.0371,0.0428,0.0207,0.0954,0.0986,0.1539,0.1601,0.3109,0.2111,0.1609,0.1582,0.2238,0.0645,0.0660,0.2273,0.3100,0.2999,0.5078,0.4797,0.5783,0.5071,0.4328,0.5550,0.6711,0.6415,0.7104,0.8080,0.6791,0.3857,0.1307,0.2604,0.5121,0.7547,0.8537,0.8507,0.6692,0.6097,0.4943,0.2744,0.0510,0.2834,0.2825,0.4256,0.2641,0.1386,0.1051,0.1343,0.0383,0.0324,0.0232,0.0027,0.0065,0.0159,0.0072,0.0167,0.0180,0.0084,0.0090,0.0032"
-    sample_input = st.text_input("Enter comma-separated sample data (60 values):", example)
-
-    if st.button("Predict Sample"):
-        try:
-            arr = np.array([float(x) for x in sample_input.split(",")]).reshape(1, -1)
-            pred = model.predict(scaler.transform(arr))[0]
-            st.success(f"### 🧭 Model Prediction: **{pred.upper()}**")
-        except Exception as e:
-            st.error("Invalid input. Please enter 60 comma-separated numeric values.")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# --------------------------------------------------
-# PAGE: ANALYSIS
-# --------------------------------------------------
-elif selected_tab == "Analysis":
-    st.markdown('<div class="fade">', unsafe_allow_html=True)
-    st.title("📊 Analysis Dashboard")
-
-    counts = df[60].value_counts()
-    st.subheader("Dataset Distribution (Rock vs Mine)")
-    st.bar_chart(counts)
-
-    st.subheader("Model Accuracy")
-    st.metric(label="Training Accuracy", value=f"{acc*100:.2f}%")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# --------------------------------------------------
-# PAGE: SETTINGS
-# --------------------------------------------------
-elif selected_tab == "Settings":
-    st.markdown('<div class="fade">', unsafe_allow_html=True)
-    st.title("⚙️ Settings & Environment")
-    st.write("This section contains environment details and setup steps.")
-    st.code("""
-    pip install -r requirements.txt
-    streamlit run app.py
-    """)
-    st.write("Model: Logistic Regression")
-    st.write("Scaler: StandardScaler")
-    st.write("Dataset: sonar.csv (local / GitHub)")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# --------------------------------------------------
-# FOOTER
-# --------------------------------------------------
+# --- Footer ---
 st.markdown("""
-<div class="footer">
-    <b>🌊 SONAR: Rock vs Mine</b> | Built with ❤️ using Streamlit
-</div>
+<footer>
+    Made with ❤️ using Streamlit | © 2025 SONAR Rock vs Mine
+</footer>
 """, unsafe_allow_html=True)
