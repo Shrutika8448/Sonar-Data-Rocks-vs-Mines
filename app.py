@@ -128,16 +128,7 @@ def plot_bar_pie(labels, title):
     ax2.set_title(f"{title} (pie)")
     st.pyplot(fig2)
 
-def plot_pca_2d(X, y_labels, title):
-    pca = PCA(n_components=2)
-    X2 = pca.fit_transform(X)
-    dfp = pd.DataFrame(X2, columns=["PC1","PC2"])
-    dfp["label"] = y_labels
-    dfp["label_pretty"] = dfp["label"].map(lambda v: "Rock" if v=="R" else ("Mine" if v=="M" else v))
-    fig, ax = plt.subplots(figsize=(6,4))
-    sns.scatterplot(data=dfp, x="PC1", y="PC2", hue="label_pretty", ax=ax, s=40)
-    ax.set_title(title)
-    st.pyplot(fig)
+
 
 # ---------- Sidebar: training upload / settings ----------
 st.sidebar.header("Model / Data")
