@@ -197,9 +197,9 @@ def page_home():
     with cols[1]:
         # reliable Unsplash images (add parameters to ensure load)
         st.image("rock.jpg",
-                 caption="Rock (example image)", use_column_width=True)
-        st.image("https://images.unsplash.com/photo-1560218883-ce3d9a4b0b54?auto=format&fit=crop&w=900&q=80",
-                 caption="Underwater scene (illustrative)", use_column_width=True)
+                 caption="Rock Image", use_column_width=True)
+        st.image("mine",
+                 caption="Mine Image", use_column_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.divider()
@@ -265,11 +265,11 @@ def page_home():
                         st.success(f"Prediction: **{pretty}**")
                         # show image
                         if lab == "R":
-                            st.image("https://images.unsplash.com/photo-1602524205483-16b6c70e7a5a?auto=format&fit=crop&w=1200&q=80",
-                                     caption="Rock example", use_column_width=True)
+                            st.image("rock.jpg",
+                                     caption="Rock", use_column_width=True)
                         else:
-                            st.image("https://images.unsplash.com/photo-1454789548928-9efd52dc4031?auto=format&fit=crop&w=1200&q=80",
-                                     caption="Mine-like underwater object (illustrative)", use_column_width=True)
+                            st.image("mine.jpg",
+                                     caption="Mine", use_column_width=True)
             except Exception as e:
                 st.error("Could not parse numbers. Ensure comma-separated floats.")
 
@@ -336,7 +336,7 @@ def page_settings():
 
     st.subheader("Files & data")
     if train_df is not None:
-        st.write(f"- Training dataset: available ({'default sonarall-data.csv' if use_default else 'uploaded file'})")
+        st.write(f"- Training dataset: available ({'default sonar.csv' if use_default else 'uploaded file'})")
         st.write(f"  - samples: {train_df.shape[0]}  features+label cols: {train_df.shape[1]}")
     else:
         st.write("- No training dataset currently loaded.")
@@ -351,7 +351,7 @@ def page_settings():
     - matplotlib
     - seaborn
     """)
-    st.markdown("**Tip:** Put `sonarall-data.csv` in the app folder to let the app auto-load training data when deployed.")
+    st.markdown("**Tip:** Put `sonar.csv` in the app folder to let the app auto-load training data when deployed.")
 
 # ---------- ROUTE ----------
 if st.session_state.page == "Home":
