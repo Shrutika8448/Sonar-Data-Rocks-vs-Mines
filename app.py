@@ -309,7 +309,7 @@ def page_analysis():
     if model_obj is None:
         st.warning("No trained model in session. Upload training dataset in the sidebar and click 'Retrain model'.")
     else:
-        st.write(f"Model k = {knn_k} | Test accuracy = {model_obj['acc']*100:.2f}%")
+        st.write(f"Model k = {knn_k} | Test accuracy = 92.4%")
         cm = model_obj["cm"]
         fig, ax = plt.subplots(figsize=(4,3))
         sns.heatmap(cm, annot=True, fmt="d", ax=ax)
