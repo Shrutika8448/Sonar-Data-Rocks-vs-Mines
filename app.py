@@ -40,26 +40,69 @@ footer {
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------- NAVBAR -----------------
-selected_tab = st.session_state.get("selected_tab", "Home")
+# ----------------- MODERN NAVBAR -----------------
+st.markdown("""
+<style>
+.navbar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #ffffff;
+  border-bottom: 3px solid #007BFF;
+  padding: 0.8rem 0;
+  gap: 3rem;
+  font-family: 'Inter', sans-serif;
+}
+.nav-item {
+  color: #333;
+  font-weight: 600;
+  font-size: 17px;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.3s ease-in-out;
+}
+.nav-item:hover {
+  color: #007BFF;
+}
+.nav-item::after {
+  content: '';
+  position: absolute;
+  width: 0%;
+  height: 3px;
+  left: 0;
+  bottom: -5px;
+  background-color: #007BFF;
+  transition: width 0.3s ease-in-out;
+  border-radius: 2px;
+}
+.nav-item:hover::after {
+  width: 100%;
+}
+.nav-active {
+  color: #007BFF;
+}
+.nav-active::after {
+  width: 100%;
+}
+</style>
+""", unsafe_allow_html=True)
 
-with stylable_container(key="navbar", css_styles="""
-    { border: none; border-radius: 0; }
-"""):
-    st.markdown('<div class="navbar">', unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col1:
-        if st.button("🏠 Home", key="home_btn"):
-            selected_tab = "Home"
-    with col2:
-        if st.button("📊 Analysis", key="analysis_btn"):
-            selected_tab = "Analysis"
-    with col3:
-        if st.button("⚙️ Settings", key="settings_btn"):
-            selected_tab = "Settings"
-    st.markdown('</div>', unsafe_allow_html=True)
+col1, col2, col3 = st.columns([1, 1, 1])
+st.markdown('<div class="navbar">', unsafe_allow_html=True)
 
-st.session_state.selected_tab = selected_tab
+col1, col2, col3 = st.columns([1, 1, 1])
+with col1:
+    if st.button("🏠 Home", key="home_btn", help="Home"):
+        st.session_state.selected_tab = "Home"
+with col2:
+    if st.button("📊 Analysis", key="analysis_btn", help="Analysis"):
+        st.session_state.selected_tab = "Analysis"
+with col3:
+    if st.button("⚙️ Settings", key="settings_btn", help="Settings"):
+        st.session_state.selected_tab = "Settings"
+
+st.markdown('</div>', unsafe_allow_html=True)
+
 
 # ----------------- MODEL TRAINING -----------------
 @st.cache_data
