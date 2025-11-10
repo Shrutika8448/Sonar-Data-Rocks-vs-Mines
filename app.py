@@ -21,8 +21,9 @@ if "selected_tab" not in st.session_state:
 # --------------------------------------------------
 @st.cache_data
 def load_data():
-        df = pd.read_csv("sonar.csv", header=None)
+    df = pd.read_csv("sonar.csv", header=None)
     return df
+
 
 @st.cache_resource
 def train_model():
