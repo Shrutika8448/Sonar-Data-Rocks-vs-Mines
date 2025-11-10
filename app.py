@@ -22,7 +22,7 @@ if "selected_tab" not in st.session_state:
 @st.cache_data
 def load_data():
     try:
-        df = pd.read_csv("https://raw.githubusercontent.com/Shrutika8448/Sonar-Data-Rocks-vs-Mines/main/sonar.csv", header=None)
+        df = pd.read_csv("./sonar.csv", header=None)
     except:
         st.warning("Online dataset unavailable. Loading local fallback...")
         df = pd.read_csv("sonar.csv", header=None)
@@ -139,9 +139,9 @@ if selected_tab == "Home":
 
     col1, col2 = st.columns(2)
     with col1:
-        st.image("https://raw.githubusercontent.com/Shrutika8448/Sonar-Data-Rocks-vs-Mines/main/rock.jpg", caption="Rock", use_container_width=True)
+        st.image("./rock.jpg", caption="Rock", use_container_width=True)
     with col2:
-        st.image("https://raw.githubusercontent.com/Shrutika8448/Sonar-Data-Rocks-vs-Mines/main/mine.jpg", caption="Mine", use_container_width=True)
+        st.image("./mine.jpg", caption="Mine", use_container_width=True)
 
     st.subheader("🔹 Upload Dataset")
     uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
