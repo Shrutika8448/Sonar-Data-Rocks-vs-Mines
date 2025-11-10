@@ -69,16 +69,21 @@ page = query_params.get("page", ["home"])[0]
 # --- Helper: Train model ---
 @st.cache_resource
 def train_model():
-    df = pd.read_csv("https://raw.githubusercontent.com/ankurdome/sonar-dataset/main/sonar.csv", header=None)
+    try:
+        df = pd.read_csv("https://raw.githubusercontent.com/ankurdome/sonar-dataset/main/sonar.csv", header=None)
+    except:
+        st.warning("⚠️ Online dataset unavailable. Loading local fallback...")
+        df = pd.read_csv("sonar.csv", header=None)
+
     X = df.iloc[:, :-1]
     y = LabelEncoder().fit_transform(df.iloc[:, -1])
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
     scaler = StandardScaler().fit(X_train)
-    X_train_scaled, X_test_scaled = scaler.transform(X_train), scaler.transform(X_test)
     model = KNeighborsClassifier(n_neighbors=3)
-    model.fit(X_train_scaled, y_train)
-    acc = accuracy_score(y_test, model.predict(X_test_scaled))
+    model.fit(scaler.transform(X_train), y_train)
+    acc = accuracy_score(y_test, model.predict(scaler.transform(X_test)))
     return model, scaler, acc
+
 
 model, scaler, acc = train_model()
 
