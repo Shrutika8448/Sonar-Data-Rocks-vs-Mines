@@ -196,7 +196,7 @@ def page_home():
         st.markdown("**Tip:** If you include a `sonarall-data.csv` file in the app folder, the app will auto-use it as default training data.")
     with cols[1]:
         # reliable Unsplash images (add parameters to ensure load)
-        st.image("https://images.unsplash.com/photo-1602524205483-16b6c70e7a5a?auto=format&fit=crop&w=900&q=80",
+        st.image("rock.jpg",
                  caption="Rock (example image)", use_column_width=True)
         st.image("https://images.unsplash.com/photo-1560218883-ce3d9a4b0b54?auto=format&fit=crop&w=900&q=80",
                  caption="Underwater scene (illustrative)", use_column_width=True)
